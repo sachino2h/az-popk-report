@@ -47,7 +47,8 @@ generate_magic_doc <- function(
   mode = c("from_template", "from_reviewed_output"),
   reviewed_doc_path = NULL,
   output_doc_path = NULL,
-  inline_tag_style = "brace"
+  inline_tag_style = "brace",
+  mark_missing_in_reviewed_output = FALSE
 ) {
   mode <- match.arg(mode)
   ymlFilePath <- config$paths$mapping_yaml
@@ -97,7 +98,8 @@ generate_magic_doc <- function(
     yaml_path = ymlFilePath,
     reviewed_doc_path = reviewed_doc_path,
     output_doc_path = output_doc_path,
-    inline_tag_style = inline_tag_style
+    inline_tag_style = inline_tag_style,
+    mark_missing = mark_missing_in_reviewed_output
   )
 }
 
@@ -105,14 +107,16 @@ generate_magic_doc_from_output <- function(
   config,
   reviewed_doc_path,
   output_doc_path = NULL,
-  inline_tag_style = "brace"
+  inline_tag_style = "brace",
+  mark_missing_in_reviewed_output = FALSE
 ) {
   generate_magic_doc(
     config = config,
     mode = "from_reviewed_output",
     reviewed_doc_path = reviewed_doc_path,
     output_doc_path = output_doc_path,
-    inline_tag_style = inline_tag_style
+    inline_tag_style = inline_tag_style,
+    mark_missing_in_reviewed_output = mark_missing_in_reviewed_output
   )
 }
 
@@ -313,5 +317,6 @@ magic_round2_result <- generate_magic_doc(
   output_doc_path = file.path(
     dirname(config$paths$magic_doc_out),
     "PopPK_Report_merge_TFL_filled_draft-magic.docx"
-  )
+  ),
+  mark_missing_in_reviewed_output = TRUE
 )

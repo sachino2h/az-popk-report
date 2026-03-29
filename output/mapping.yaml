@@ -63,8 +63,8 @@ inline:
   'Study and Dose':
     'id': 'inl_study_and_dose'
     'type': 'text'
-    'status': 'unchanged'
-    'value': 'Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD'
+    'status': 'updated'
+    'value': 'Study 106 - 100 mg QD Study 106 - 100 mg QD'
   'pc':
     'id': 'inl_pc'
     'type': 'text'
@@ -73,12 +73,12 @@ inline:
   'dose-normalized':
     'id': 'inl_dose_normalized'
     'type': 'text'
-    'status': 'unchanged'
+    'status': 'deleted'
     'value': ''
   'renal function':
     'id': 'inl_renal_function'
     'type': 'text'
-    'status': 'unchanged'
+    'status': 'deleted'
     'value': ''
   ' name of source data file ':
     'id': 'inl_name_of_source_data_file'
@@ -98,17 +98,17 @@ inline:
   'n':
     'id': 'inl_n'
     'type': 'text'
-    'status': 'unchanged'
+    'status': 'updated'
     'value': '120 120'
   'XX mg':
     'id': 'inl_xx_mg'
     'type': 'text'
-    'status': 'unchanged'
-    'value': '100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg 100 mg'
+    'status': 'updated'
+    'value': '100 mg 100 mg'
   'Add any relevant observation across selected strata for table':
     'id': 'inl_add_any_relevant_observation_across_selected_strata_for_table'
     'type': 'text'
-    'status': 'unchanged'
+    'status': 'updated'
     'value': 'Exposure increased with dose and remained consistent across reviewed strata..'
   'fast/slow':
     'id': 'inl_fast_slow'
@@ -148,8 +148,8 @@ inline:
   'dose':
     'id': 'inl_dose'
     'type': 'text'
-    'status': 'deleted'
-    'value': ''
+    'status': 'new'
+    'value': '100 mg once daily'
 
 blocks:
   'model run summary':
@@ -190,17 +190,18 @@ blocks:
 
   'studies':
     'type': 'table'
-    'title': 'Na Please whyyy'
+    'title': 'Clinical studies listing'
     'footnote': 'List of studies included in analysis.'
-    'status': 'updated'
+    'status': 'unchanged'
     files:
       - pk-data-sum-dose-study.docx
     'id': 'blk_studies'
 
   'gof cwres ':
-    'type': 'table'
-    'title': 'GOF CWRES plot'
-    'footnote': 'Conditional HAHSHAHHSHAHSHAHHSHSHSAHSHSHSH'
-    'status': 'unchanged'
-    files: []
+    'type': 'image'
+    'title': ''
+    'footnote': 'Conditional weighted residuals versus time.'
+    'status': 'updated'
+    files:
+      - dn-conc-time-linear.png
     'id': 'blk_gof_cwres'

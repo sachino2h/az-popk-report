@@ -2435,12 +2435,29 @@ get_inline_value_from_yaml <- function(inline_entry) {
   normalize_doc_scalar(inline_entry)
 }
 
-build_review_block_placeholder <- function(block_key, block_data) {
+build_review_block_placeholder <- function(block_key, block_data, mark_missing = FALSE) {
   display_name <- normalize_doc_key_exact(block_key)
   block_type <- normalize_doc_scalar(block_data$type)
   title <- normalize_doc_scalar(block_data$title)
   footnote <- normalize_doc_scalar(block_data$footnote)
   files <- normalize_doc_files(block_data$files)
+
+  if (isTRUE(mark_missing)) {
+    name_field <- field_or_missing(display_name, "Name")
+    title_field <- field_or_missing(title, "Title")
+    footnote_field <- field_or_missing(footnote, "Footnote")
+    files_field <- field_or_missing(files, "Files")
+    type_field <- field_or_missing(block_type, "Type")
+
+    return(paste0(
+      "<<Name:", name_field$value,
+      "|Title:", title_field$value,
+      "|Footnote:", footnote_field$value,
+      "|Files:", files_field$value,
+      "|Type:", type_field$value,
+      ">>"
+    ))
+  }
 
   paste0(
     "<<Name:", display_name,
@@ -2832,7 +2849,7 @@ build_block_id_to_key_map <- function(yml_data) {
   out
 }
 
-convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_deleted = TRUE) {
+convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_deleted = TRUE, mark_missing = FALSE) {
   body_xml <- officer::docx_body_xml(doc)
   ns <- xml2::xml_ns(body_xml)
   paragraphs <- xml2::xml_find_all(body_xml, ".//w:p", ns)
@@ -2954,7 +2971,11 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
 
     placeholder <- ""
     if (!should_skip && !is.null(block_data) && is.list(block_data)) {
-      placeholder <- build_review_block_placeholder(block_key, block_data)
+      placeholder <- build_review_block_placeholder(
+        block_key = block_key,
+        block_data = block_data,
+        mark_missing = mark_missing
+      )
       replacement_rows[[length(replacement_rows) + 1]] <- data.frame(
         block_id = block_id,
         replacement = placeholder,
@@ -3156,7 +3177,7 @@ remove_hidden_rpfy_runs <- function(doc) {
   doc
 }
 
-generate_magic_doc_from_reviewed_output <- function(yaml_path, reviewed_doc_path, output_doc_path, inline_tag_style = "brace") {
+generate_magic_doc_from_reviewed_output <- function(yaml_path, reviewed_doc_path, output_doc_path, inline_tag_style = "brace", mark_missing = FALSE) {
   if (!file.exists(yaml_path)) {
     stop(paste0("YAML file not found: ", yaml_path), call. = FALSE)
   }
@@ -3178,7 +3199,8 @@ generate_magic_doc_from_reviewed_output <- function(yaml_path, reviewed_doc_path
   block_result <- convert_report_blocks_to_magic_placeholders(
     doc = doc,
     yml_data = yml_data,
-    skip_deleted = TRUE
+    skip_deleted = TRUE,
+    mark_missing = mark_missing
   )
   doc <- block_result$doc
 
@@ -3191,6 +3213,9 @@ generate_magic_doc_from_reviewed_output <- function(yaml_path, reviewed_doc_path
 
   doc <- remove_hidden_rpfy_runs(doc)
   doc <- strip_visible_block_id_markers(doc)
+  if (isTRUE(mark_missing)) {
+    doc <- color_missing_runs_red(doc)
+  }
 
   if (nrow(block_result$replacements) > 0) {
     doc <- add_hidden_ids_to_doc(doc, block_result$replacements)

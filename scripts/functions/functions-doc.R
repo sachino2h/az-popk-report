@@ -575,45 +575,89 @@ replace_split_placeholders <- function(doc, replacements_df) {
 color_missing_runs_red <- function(doc) {
   body_xml <- docx_body_xml(doc)
   ns <- xml2::xml_ns(body_xml)
-  target_nodes <- xml2::xml_find_all(body_xml, ".//w:t[contains(., 'MISSING_VALUE(')]", ns)
+  paragraphs <- xml2::xml_find_all(body_xml, ".//w:p", ns)
 
-  if (length(target_nodes) == 0) {
+  if (length(paragraphs) == 0) {
     return(doc)
   }
 
-  for (text_node in target_nodes) {
-    run_node <- xml2::xml_find_first(text_node, "ancestor::w:r[1]", ns)
-    if (inherits(run_node, "xml_missing")) {
+  for (paragraph in paragraphs) {
+    text_nodes <- xml2::xml_find_all(paragraph, ".//w:t", ns)
+    if (length(text_nodes) == 0) {
       next
     }
 
-    rpr_node <- xml2::xml_find_first(run_node, "./w:rPr", ns)
-    if (inherits(rpr_node, "xml_missing")) {
-      rpr_node <- xml2::xml_add_child(
-        run_node,
-        xml2::read_xml(
-          sprintf(
-            '<w:rPr xmlns:w="%s"/>',
-            WORD_NS
-          )
-        ),
-        .where = 0
-      )
+    text_values <- vapply(text_nodes, xml2::xml_text, character(1))
+    full_text <- paste(text_values, collapse = "")
+    if (!nzchar(full_text)) {
+      next
     }
 
-    color_node <- xml2::xml_find_first(rpr_node, "./w:color", ns)
-    if (inherits(color_node, "xml_missing")) {
-      xml2::xml_add_child(
-        rpr_node,
-        xml2::read_xml(
-          sprintf(
-            '<w:color xmlns:w="%s" w:val="FF0000"/>',
-            WORD_NS
+    marker_locs <- gregexpr("MISSING(?:_VALUE)?\\([^)]*\\)", full_text, perl = TRUE)[[1]]
+    if (length(marker_locs) == 1 && marker_locs[1] == -1) {
+      next
+    }
+
+    marker_lengths <- attr(marker_locs, "match.length")
+    marker_ranges <- data.frame(
+      start = as.integer(marker_locs),
+      end = as.integer(marker_locs + marker_lengths - 1L),
+      stringsAsFactors = FALSE
+    )
+
+    offsets <- integer(length(text_values))
+    running <- 1L
+    for (i in seq_along(text_values)) {
+      offsets[i] <- running
+      running <- running + nchar(text_values[[i]], type = "chars")
+    }
+
+    for (i in seq_along(text_nodes)) {
+      value <- text_values[[i]]
+      if (!nzchar(value)) {
+        next
+      }
+
+      run_start <- offsets[i]
+      run_end <- run_start + nchar(value, type = "chars") - 1L
+      overlaps <- marker_ranges$start <= run_end & marker_ranges$end >= run_start
+      if (!any(overlaps)) {
+        next
+      }
+
+      run_node <- xml2::xml_find_first(text_nodes[[i]], "ancestor::w:r[1]", ns)
+      if (inherits(run_node, "xml_missing")) {
+        next
+      }
+
+      rpr_node <- xml2::xml_find_first(run_node, "./w:rPr", ns)
+      if (inherits(rpr_node, "xml_missing")) {
+        rpr_node <- xml2::xml_add_child(
+          run_node,
+          xml2::read_xml(
+            sprintf(
+              '<w:rPr xmlns:w="%s"/>',
+              WORD_NS
+            )
+          ),
+          .where = 0
+        )
+      }
+
+      color_node <- xml2::xml_find_first(rpr_node, "./w:color", ns)
+      if (inherits(color_node, "xml_missing")) {
+        xml2::xml_add_child(
+          rpr_node,
+          xml2::read_xml(
+            sprintf(
+              '<w:color xmlns:w="%s" w:val="FF0000"/>',
+              WORD_NS
+            )
           )
         )
-      )
-    } else {
-      xml2::xml_set_attr(color_node, "val", "FF0000")
+      } else {
+        xml2::xml_set_attr(color_node, "val", "FF0000")
+      }
     }
   }
 
@@ -1873,7 +1917,10 @@ sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks
     # This allows partial edits (e.g. title removed) without marking block deleted.
     block$title <- normalize_review_value(match_row$title[[1]])
     block$footnote <- normalize_review_value(match_row$footnote[[1]])
-    block$type <- normalize_review_value(match_row$type[[1]])
+    detected_type <- normalize_review_value(match_row$type[[1]])
+    if (nzchar(detected_type)) {
+      block$type <- detected_type
+    }
     next_files <- parse_files_field(match_row$files[[1]])
 
     # Preserve existing files only when real asset content is still present.
@@ -2640,6 +2687,17 @@ replace_inline_tag_keys_from_yaml <- function(doc, yml_data) {
     return(list(doc = doc, updates = 0L))
   }
 
+  paragraph_has_drawing <- vapply(
+    paragraphs,
+    function(p) length(xml2::xml_find_all(p, ".//w:drawing", ns)) > 0,
+    logical(1)
+  )
+  paragraph_in_table <- vapply(
+    paragraphs,
+    function(p) !inherits(xml2::xml_find_first(p, "ancestor::w:tbl[1]", ns), "xml_missing"),
+    logical(1)
+  )
+
   updates <- 0L
 
   for (paragraph in paragraphs) {
@@ -2767,7 +2825,11 @@ sync_yaml_to_review_doc <- function(yaml_path, review_doc_path, output_doc_path 
         id_to_key[[block_id]] <- key
         block_replacement_rows[[length(block_replacement_rows) + 1]] <- data.frame(
           block_id = block_id,
-          replacement = build_review_block_placeholder(key, block_data),
+          replacement = build_review_block_placeholder(
+            block_key = key,
+            block_data = block_data,
+            mark_missing = TRUE
+          ),
           stringsAsFactors = FALSE
         )
       }
@@ -2790,7 +2852,11 @@ sync_yaml_to_review_doc <- function(yaml_path, review_doc_path, output_doc_path 
 
         block_key <- id_to_key[[block_id]]
         block_data <- yml_data$blocks[[block_key]]
-        replacement <- build_review_block_placeholder(block_key, block_data)
+        replacement <- build_review_block_placeholder(
+          block_key = block_key,
+          block_data = block_data,
+          mark_missing = TRUE
+        )
 
         # Deterministic regeneration: for tracked block paragraphs, force a
         # canonical placeholder string instead of partial in-line substitutions.
@@ -2821,6 +2887,7 @@ sync_yaml_to_review_doc <- function(yaml_path, review_doc_path, output_doc_path 
     doc <- add_hidden_ids_to_doc(doc, block_replacements_df)
   }
   doc <- add_hidden_inline_ids_to_doc(doc, yml_data)
+  doc <- color_missing_runs_red(doc)
 
   print(doc, target = output_doc_path)
 
@@ -2861,6 +2928,17 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
     )))
   }
 
+  paragraph_has_drawing <- vapply(
+    paragraphs,
+    function(p) length(xml2::xml_find_all(p, ".//w:drawing", ns)) > 0,
+    logical(1)
+  )
+  paragraph_in_table <- vapply(
+    paragraphs,
+    function(p) !inherits(xml2::xml_find_first(p, "ancestor::w:tbl[1]", ns), "xml_missing"),
+    logical(1)
+  )
+
   marker_rows <- list()
   for (idx in seq_along(paragraphs)) {
     p <- paragraphs[[idx]]
@@ -2890,9 +2968,20 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
   }
 
   markers <- dplyr::bind_rows(marker_rows)
+  block_marker_types <- c(
+    "block_start", "block_end",
+    "title_start", "title_end",
+    "footnote_start", "footnote_end",
+    "image_start", "image_end", "image_file",
+    "table_start", "table_end", "table_file",
+    "block_key", "block_type"
+  )
   starts <- markers |>
-    dplyr::filter(marker_type == "block_start" & nzchar(block_id)) |>
+    dplyr::filter(marker_type %in% block_marker_types & nzchar(block_id)) |>
+    dplyr::group_by(block_id) |>
+    dplyr::summarise(para_idx = min(para_idx), .groups = "drop") |>
     dplyr::arrange(para_idx)
+
   if (nrow(starts) == 0) {
     return(list(doc = doc, updates = 0L, replacements = data.frame(
       block_id = character(0),
@@ -2918,6 +3007,37 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
     }
     if (!is.finite(next_start_para) || next_start_para < start_para) {
       next_start_para <- start_para
+    }
+
+    block_markers <- markers |>
+      dplyr::filter(block_id == !!block_id)
+    has_explicit_start <- any(block_markers$marker_type %in% c("block_start", "title_start", "image_start", "table_start"))
+
+    # If START markers are missing (common after title deletion/edit),
+    # anchor to nearest real content before first seen marker.
+    if (!isTRUE(has_explicit_start)) {
+      lower_bound <- if (i > 1) as.integer(starts$para_idx[[i - 1]]) + 1L else 1L
+      if (lower_bound < 1L) lower_bound <- 1L
+      if (lower_bound > start_para) lower_bound <- start_para
+
+      block_key_tmp <- id_to_key[[block_id]]
+      block_type_tmp <- ""
+      if (!is.null(block_key_tmp) && nzchar(block_key_tmp) && !is.null(yml_data$blocks[[block_key_tmp]])) {
+        block_type_tmp <- tolower(normalize_doc_scalar(yml_data$blocks[[block_key_tmp]]$type))
+      }
+      if (!nzchar(block_type_tmp)) {
+        if (any(block_markers$marker_type %in% c("image_file", "image_end"))) block_type_tmp <- "image"
+        if (any(block_markers$marker_type %in% c("table_file", "table_end"))) block_type_tmp <- "table"
+      }
+
+      candidate_idx <- seq.int(lower_bound, start_para)
+      if (identical(block_type_tmp, "image")) {
+        hit <- candidate_idx[paragraph_has_drawing[candidate_idx]]
+        if (length(hit) > 0) start_para <- max(hit)
+      } else if (identical(block_type_tmp, "table")) {
+        hit <- candidate_idx[paragraph_in_table[candidate_idx]]
+        if (length(hit) > 0) start_para <- max(hit)
+      }
     }
 
     end_rows <- markers |>
@@ -2986,7 +3106,33 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
     for (pidx in seq.int(start_para, end_para)) {
       p <- paragraphs[[pidx]]
       if (pidx == start_para) {
-        changed <- replace_text_in_paragraph_nodes(p, function(full_text) placeholder)
+        text_nodes <- xml2::xml_find_all(p, ".//w:t", ns)
+        has_visible_text <- FALSE
+        if (length(text_nodes) > 0) {
+          hidden_flags <- vapply(text_nodes, function(node) {
+            run_node <- xml2::xml_find_first(node, "ancestor::w:r[1]", ns)
+            if (inherits(run_node, "xml_missing")) return(FALSE)
+            vanish_node <- xml2::xml_find_first(run_node, "./w:rPr/w:vanish", ns)
+            !inherits(vanish_node, "xml_missing")
+          }, logical(1))
+          has_visible_text <- any(!hidden_flags)
+        }
+
+        if (isTRUE(has_visible_text)) {
+          changed <- replace_text_in_paragraph_nodes(p, function(full_text) placeholder)
+        } else {
+          changed <- FALSE
+        }
+
+        if (!isTRUE(changed) && nzchar(placeholder)) {
+          # Start paragraph may have no visible text nodes (only hidden markers
+          # or drawing anchors). Inject a visible run so placeholder survives.
+          new_run <- xml2::read_xml(sprintf('<w:r xmlns:w="%s"><w:t/></w:r>', WORD_NS))
+          tnode <- xml2::xml_find_first(new_run, ".//w:t", xml2::xml_ns(new_run))
+          xml2::xml_text(tnode) <- placeholder
+          xml2::xml_add_child(p, new_run)
+          changed <- TRUE
+        }
       } else {
         changed <- replace_text_in_paragraph_nodes(p, function(full_text) "")
       }

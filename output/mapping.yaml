@@ -63,8 +63,8 @@ inline:
   'Study and Dose':
     'id': 'inl_study_and_dose'
     'type': 'text'
-    'status': 'updated'
-    'value': 'Study 106 - 100 mg QD Study 106 - 100 mg QD'
+    'status': 'unchanged'
+    'value': 'Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD'
   'pc':
     'id': 'inl_pc'
     'type': 'text'
@@ -98,17 +98,17 @@ inline:
   'n':
     'id': 'inl_n'
     'type': 'text'
-    'status': 'updated'
-    'value': '120 120'
+    'status': 'unchanged'
+    'value': '120 120 120 120'
   'XX mg':
     'id': 'inl_xx_mg'
     'type': 'text'
-    'status': 'updated'
-    'value': '100 mg 100 mg'
+    'status': 'unchanged'
+    'value': '100 mg 100 mg 100 mg 100 mg'
   'Add any relevant observation across selected strata for table':
     'id': 'inl_add_any_relevant_observation_across_selected_strata_for_table'
     'type': 'text'
-    'status': 'updated'
+    'status': 'unchanged'
     'value': 'Exposure increased with dose and remained consistent across reviewed strata..'
   'fast/slow':
     'id': 'inl_fast_slow'
@@ -154,8 +154,8 @@ inline:
 blocks:
   'model run summary':
     'type': 'table'
-    'title': 'Model run summary table'
-    'footnote': 'Summary of key model run outputs.'
+    'title': 'Sachin Patel'
+    'footnote': ''
     'status': 'unchanged'
     files:
       - 106-pk-params.docx
@@ -164,7 +164,7 @@ blocks:
   'model bootstrap plot':
     'type': 'image'
     'title': 'Bootstrap diagnostic plot'
-    'footnote': 'Bootstrap plot for final model assessment.'
+    'footnote': ''
     'status': 'unchanged'
     files:
       - 106-bootstrap.png
@@ -172,8 +172,8 @@ blocks:
 
   'categorical covariate summary ':
     'type': 'table'
-    'title': 'Categorical covariate summary'
-    'footnote': 'Categorical covariate distribution by study.'
+    'title': ''
+    'footnote': ''
     'status': 'unchanged'
     files:
       - cat-cov-sum-study.docx
@@ -181,7 +181,7 @@ blocks:
 
   'eta pairs':
     'type': 'image'
-    'title': 'ETA pairwise relationship plot'
+    'title': ''
     'footnote': 'Pairwise ETA relationship overview.'
     'status': 'unchanged'
     files:
@@ -190,17 +190,16 @@ blocks:
 
   'studies':
     'type': 'table'
-    'title': 'Clinical studies listing'
+    'title': ''
     'footnote': 'List of studies included in analysis.'
     'status': 'unchanged'
-    files:
-      - pk-data-sum-dose-study.docx
+    files: []
     'id': 'blk_studies'
 
   'gof cwres ':
     'type': 'image'
     'title': ''
-    'footnote': 'Conditional weighted residuals versus time.'
+    'footnote': 'Spaghetti - Spaghetti -plots of individual PK profiles. Points are observations, lines connect observations from the same participant. Point shape indicate data above or below the quantification limit (XX ng/mL, dashed line)'
     'status': 'updated'
     files:
       - dn-conc-time-linear.png

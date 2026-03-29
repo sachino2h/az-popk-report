@@ -282,7 +282,7 @@ magic_result <- generate_magic_doc(
 
 sync_review_yaml(
   config = config,
-  mode = "doc_to_yaml",
+  mode = "yaml_to_doc",
   reviewDocPath = config$paths$magic_doc_out
 )
 

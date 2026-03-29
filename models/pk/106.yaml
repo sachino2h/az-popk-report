@@ -1,0 +1,10 @@
+model_type: nonmem
+based_on:
+- '102'
+model_path: 106.ctl
+notes:
+- Client was interested in adding Albumin to CL
+description: Two-compartment model with first-order absorption and linear elimination.
+  Effects of eGFR, age, and ALB on CL/F.
+star:
+- yes

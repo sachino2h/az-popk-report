@@ -1,0 +1,380 @@
+---
+title: "Model Management - Working Notebook"
+editor_options: 
+  chunk_output_type: console
+---
+
+**NOTE: This `model-management.Rmd` file is meant to be a fluid "working
+notebook"** for the Pharmacometrician to use throughout the project. Some points
+to consider:
+
+* This file is _not_ meant to "knit" to HTML or PDF.
+
+* This file will _not_ be submitted for QC at any point. QC of the relevant
+activities will be done via other scripts (e.g. `model-overview.R`, `run-log.R`,
+etc.).
+
+* You do _not_ need to copy/paste code in here in order to preserve the story of
+your modeling activities. Instead, re-use code chunks as needed, changing the
+name of model as you iterate, and updating any specific pieces of code where
+relevant.
+
+* Attach notes, description, and other annotation to your model object as you go
+(via `bbr`'s `add_notes()`, `add_description()`, etc.). **`bbr` will keep track
+of this information for you. You do _not_ need to keep these calls (or the
+associated notes) in this script to preserve them.**
+
+* All notes, description, etc. can be accessed later by re-loading the specific
+model, or by viewing them in the tibble returned from `run_log()`.
+
+
+```{r setup}
+library(bbr)
+library(tidyverse)
+library(here)
+library(pmplots)
+library(magrittr)
+library(yspec)
+
+source(here("scripts/functions/bbr-helpers.R"))
+source(here("scripts/functions/functions-diagnostics.R"))
+source(here("scripts/functions/model-check-helpers.R"))
+
+# define model dir and load yspec YAML
+modDir <- here("models/pk")
+spec_path <- here("data/derived/pk.yml")
+spec <- load_spec(spec_path)
+
+# Install bbi (once per user per project)
+# bbr::use_bbi(.path = getOption("bbr.bbi_exe_path"))
+
+# Initialize bbi (once per modeling directory)
+# bbi_init(modDir, .nonmem_dir = "/opt/NONMEM", .nonmem_version = "nm75")
+```
+
+
+# 1 run log
+
+```{r, eval=FALSE}
+rl_cols <- c("run","description","based_on","ofv", "dofv", "aic","notes", "error_msg")
+rl <- run_log(modDir) %>% 
+  add_config() %>% suppressWarnings() %>%
+  add_summary() %>%
+  add_dofv() %>%
+  collapse_to_string(notes) %>%
+  select(c(all_of(rl_cols)), contains("has_changed"))
+
+View(rl, "runlog")
+```
+
+# 2 create models
+
+## first model
+
+```{r, eval=FALSE}
+# Use this when starting a new model from the beginning
+#  i.e. a model that is _not_ based on an existing model
+
+# Path to control stream file
+#  * Replace "<model-name>.ctl" with name of your control stream file
+ctl_path <- here::here("models", "pk", "<model-name>.ctl") 
+
+# Optionally, uncomment this to copy an example control stream file, as a starting point
+# fs::file_copy(
+#   here::here("models", "pk", "102.ctl"),
+#   ctl_path
+# )
+
+if (!fs::file_exists(ctl_path)) warning(paste("Please copy control stream file to", ctl_path))
+
+# Create a bbr model object from this control stream file
+mod <- new_model(
+  fs::path_ext_remove(ctl_path),
+  # .tags = "<my tag>" # uncomment to add tags
+)
+
+# open file for editing in RStudio
+open_model_file(mod) 
+```
+
+
+## model iteration
+
+```{r, eval=FALSE}
+PARENT_MODEL <- 106 # Name of most recently completed model
+THIS_MODEL <- 107   # Name of new model to create (based on PARENT_MODEL)
+
+set.seed(240321) # for reproducibility of tweak_param_estimates(), below
+
+parent_mod <- read_model(file.path(modDir, PARENT_MODEL))
+
+mod <- copy_model_from(
+  .parent_mod=parent_mod, 
+  .new_model=THIS_MODEL, # will increment, or pass custom name if desired
+  # .overwrite = TRUE,   # uncomment this line to overwrite existing THIS_MODEL
+  # .inherit_tags = TRUE # uncomment this line to inherit any tags from parent model
+) %>%
+  update_model_id() %>%
+  inherit_param_estimates() %>%
+  tweak_initial_estimates()
+
+# open file for editing in RStudio
+open_model_file(mod) 
+```
+
+## add model annotation
+Annotating your models as you work enhances traceability and reproduceability.
+You do _not_ have to maintain the code for these model annotation calls; `bbr`
+keeps track of all annotations for later reference. They can then be used in Run
+Logs and other reporting outputs, as needed.
+
+Also note that **these annotation functions can be run at any time, before or
+after executing your model.**
+
+Consider the following guidance:
+
+* **`description`** is used to document the basic model structure. 
+* What you add here will be included in the final Run Log table. It should 
+"stand alone" to describe model structure. 
+* You will need to enter this _manually, for each new model_.
+
+* **`notes`** are for informal notes on decision points, model performance, etc. 
+* These are for later reference by the modeler or collaborators, and will 
+_not_ be included in the final Run Log. 
+* Often, `notes` are used to describe notable changes from parent model. 
+
+* **`star`** only your key models. 
+* Only starred models will be included in the final Run Log table in the report. 
+* You can use `add_star(mod)` or `remove_star(mod)` at any point in the 
+analysis process.
+
+* **`tags`** are optional organizational helpers. 
+* These are often used to organize "categories" of models. 
+* You can easily filter a Run Log to only models with a given tag by using 
+`run_log(..., .include = "<my tag>")`.
+
+
+```{r}
+# preview the description of the parent model
+print(parent_mod$description)
+```
+
+```{r}
+# uncomment the next line and fill in description of new model 
+#   to describe the basic model structure
+# mod <- add_description(mod, "<description of new model>")
+print(mod$description)
+```
+
+
+```{r}
+# optionally, add notes or tags before executing
+# mod <- mod %>% add_notes("<my note>")
+# mod <- mod %>% add_tags("<my tag>")
+```
+
+```{r}
+## compare control stream to parent model
+model_diff(mod)
+```
+
+
+# 3 execute model
+
+```{r, eval=FALSE}
+# set default parallelization for this model
+#   see bbr::print_bbi_args() for other options that can be set
+mod <- mod %>% add_bbi_args(
+  list(parallel = TRUE, threads = 8) 
+)
+```
+
+## submit local
+
+```{r, eval=FALSE}
+check_model_setup(mod, .join_col = "NUM")
+```
+```{r}
+submit_model(mod) # submit model to run on compute nodes
+# submit_model(mod, .mode="local", .wait = FALSE) # or submit model to run on head node  
+```
+
+## monitoring
+
+```{r, eval = FALSE}
+# check if run has finished
+check_nonmem_finished(mod)
+# wait_for_nonmem(mod) # optionally hold the R console until model finishes
+
+# print head and tail of output files to R console
+tail_lst(mod)
+tail_output(mod)
+
+# open .lst file to view in RStudio
+build_path_from_model(mod, ".lst") %>% file.edit()
+
+# open OUTPUT or PRDERR files to view in RStudio
+open_file_if_exists(mod, "OUTPUT")
+open_file_if_exists(mod, "PRDERR")
+```
+
+## Simulate
+```{r, eval=FALSE}
+SIMULATE <- FALSE
+
+if (isTRUE(SIMULATE)) {
+  # Model to simulate
+  smod <- read_model(file.path(modDir, THIS_MODEL))
+  check_msf_file(smod)
+  
+  # Data
+  data <- nm_data(smod)
+  data <- filter(data, is.na(C))
+  data <- mutate(data, BLQ = 0)
+  
+  # Simulate
+  add_simulation(
+    smod, 
+    n = 300,  
+    data = data, 
+    sim_cols = c("DV", "PRED"), 
+    .mode = "local",
+    .join_col = "NUM", .wait = TRUE, .overwrite = TRUE,
+    .bbi_args = list(threads = 1), # change this if you want more
+    seed = 1234
+  )
+  
+  sim <- get_simulation(smod)
+  model_diff(sim) # Inspect differences of new control stream
+
+  # Check output if finished
+  if(check_nonmem_finished(smod)) {
+    sims <- nm_join_sim(smod)
+    nrow(sims)/nrow(data)
+  }
+}
+```
+
+
+# 4 view run results
+
+## model summary
+
+```{r, eval=FALSE}
+modsum <- model_summary(mod) 
+print(modsum)
+```
+
+```{r, eval=FALSE}
+# preview final parameter estimates
+param_df <- param_estimates(modsum) 
+View(param_df)
+```
+
+
+## ad-hoc diagnostics
+
+```{r, eval=FALSE}
+can_be_nm_joined(mod)
+
+# join input data to output tables
+dat <- nm_join(mod) %>%
+  dplyr::filter(EVID == 0) %>% # Filter to only observation records
+  yspec::ys_add_factors(spec, .suffix = "") # Add factors to data set based on spec information
+View(dat)
+
+# make some simple diagnostic plots with MetrumRG's pmplots package
+dv_pred(dat, yname = ys_get_short_unit(spec)$DV)
+dv_ipred(dat, yname = ys_get_short_unit(spec)$DV)
+cwres_panel(dat)
+```
+
+## render diagnostics templates
+
+```{r, eval=FALSE}
+# Render diagnostics with a parameterized Rmd template
+#   cmd+click on function name to see documentation and argument options
+model_diagnostics(
+  .mod = mod,
+  .p = list(
+    cont_cov_flag = "diagContCov", 
+    cat_cov_flag = "diagCatCov",
+    eta_names = c("ETA1//ETA-KA", "ETA2//ETA-V/F", "ETA3//ETA-CL/F"),
+    run_mrggsave = TRUE ),
+  template =  here("scripts", "templates", "pk-diagnostics.Rmd")
+) %>%
+  browseURL()     # this will open the HTML doc in your browser
+
+```
+
+```{r, eval = FALSE}
+model_diagnostics(
+  .mod = mod,
+  # .p = list(log_dv = TRUE),   ## optionally pass in document parameters
+  template = here("scripts", "templates", "id-dv-pred-plots.Rmd")
+) %>%
+  browseURL()
+
+```
+
+
+## compare two models
+
+```{r, eval=FALSE}
+model_diff(mod) # compare to parent model
+```
+
+
+## add post-execution model annotation
+
+These annotation functions can be run at any time, before or after executing 
+or evaluating your model.
+
+Review of relevant guidance from above:
+
+* **`notes`** are for informal notes on decision points, model performance, etc. 
+* These are for later reference by the modeler or collaborators, and will 
+_not_ be included in the final Run Log. 
+* Often, `notes` are used to describe notable changes from parent model. 
+
+* **`star`** only your key models. 
+* Only starred models will be included in the final Run Log table in the report. 
+* You can use `add_star(mod)` or `remove_star(mod)` at any point in the 
+analysis process.
+
+
+```{r}
+# uncomment to add any notes 
+# * key decision points
+# * notes on model performance
+# * notable changes from parent model
+# mod <- add_notes(mod, "<notes on new model>")
+
+# IF this is a key model that we want to include in the report, 
+#   uncomment the next line to add a "star" to it
+# mod <- add_star(mod)
+```
+
+
+# 5 assorted utility code
+
+## run many models
+```{r, eval=FALSE}
+mods_to_run <- 106:200
+map(mods_to_run, ~read_model(file.path(modDir,.x))) %>% 
+  submit_models(.bbi_args=list(overwrite=TRUE, parallel = TRUE, threads = 8))
+```
+
+## apply tag to many models
+```{r, eval=FALSE}
+mods_to_tag <- 106:200
+walk(mods_to_tag, ~read_model(file.path(modDir,.x)) %>% 
+       add_tags("<my tag>"))
+```
+
+## open many models in RStudio
+```{r, eval=FALSE}
+mods_to_open <- 106:200
+walk(mods_to_open, ~read_model(file.path(modDir,.x)) %>% 
+       open_model_file())
+```

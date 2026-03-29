@@ -1,0 +1,250 @@
+---
+title: "Individual plots of DV, PRED and IPRED over time or TAD"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    depth: 2
+params:
+  model_run: 106
+  model_dir: "models/pk"
+  script: "id-dv-pred-plots.Rmd"
+  yspec: "data/derived/pk.yml"
+  #yspec_namespace: ["plot", "tex"] # optionally uncomment to use alternate spec namespace
+  log_dv: FALSE
+  include_plots: TRUE
+  run_mrggsave: FALSE
+---
+
+
+```{r setup_general, include = FALSE}
+### General script set-up
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      height = 7, width = 6)
+
+
+### Packages ----------------------------
+library(tidyverse)
+library(pmplots)
+library(pmtables)
+library(bbr)
+library(mrgmisc)
+library(yaml)
+library(yspec)
+library(mrggsave)
+library(here)
+library(glue)
+library(cowplot) ## KK: check all packages needed
+
+### Model directory ----------------------------
+thisModelPath <- file.path(params$model_dir, params$model_run)
+
+### Directories ----------------------------
+figDir <- here("results", "figure", "diagnostics", params$model_run)
+if(!dir.exists(figDir)) dir.create(figDir, recursive = TRUE)
+
+### Options ----------------------------
+options(mrg.script = params$script, 
+        mrggsave.dir = figDir,       # set figure directory here
+        mrggsave.dev = "pdf"         # save pdf, png, or both ("pdf, png")
+        )
+theme_set(theme_bw())
+margin <- theme(plot.margin = unit(c(0.2, 0.2, 0.1, 0.1), "in"))
+run_mrggsave <- params$run_mrggsave 
+
+```
+
+## Model number: `r params$model_run`
+
+```{r read_mod_summary, results = "asis"}
+### Read in model and generate summary ----------------------------
+mod <- read_model(here(thisModelPath))
+summ <- mod %>% model_summary()
+```
+
+```{r yspec_details}
+### Load Spec ----------------------------
+# Information in the spec file is used to label the figures automatically.
+
+# Check a spec was provided 
+stopifnot(is.character(params$yspec))
+
+# load yspec
+spec <- ys_load(here(params$yspec)) 
+  
+# if namespaces provided in spec
+if(is.character(params$yspec_namespace)){
+  spec <- ys_namespace(spec, params$yspec_namespace)
+}
+
+```
+
+```{r read_in_data, message=FALSE}
+
+# Read in model ----------------------------
+mod <- read_model(here(thisModelPath))
+
+# Join original dataset and nonmem output ----------------------------
+data0 <- nm_join(mod)
+
+# The NONMEM input dataset and output tables are read in and joined by a `NUM` 
+# column (with bbr::nm_join). **This assumes that a row number column (called `NUM`) 
+# was included during data assembly and is output in all $TABLE.** 
+# The idea is that in NONMEM, you table just `NUM` and none of the other input data items. 
+# They all get joined back to the NONMEM output (including character columns).
+
+# If DV was estimated in the log domain ----------------------------
+if(params$log_dv) {
+  data0 <- data0 %>%
+    mutate(DV = exp(DV),
+           IPRED = exp(IPRED), 
+           PRED = exp(PRED))  
+}
+
+# Note, this code assumes the user tabled DV, PRED, and IPRED in the NONMEM model
+
+# Observation rows only and factors ----------------------------
+data <- data0 %>%
+  filter(EVID == 0) %>%
+  ys_factors(spec)
+
+# Note, the `data` used in the diagnostic plots has been filtered to only 
+# include the observations (i.e., `EVID == 0`). Further modifications maybe needed, 
+# for example, if BLQ data was included in the model or if the `DV` was log-transformed. 
+
+```
+
+```{r xaxis_label_names}
+# Get label and units from spec (short and units)  ----------------------------
+# Code currently assumes the time and tad columns named TIME and TAD
+short_units <- ys_get_short_unit(spec)
+
+xTIME <- short_units$TIME
+xTAD <- short_units$TAD
+yLAB <- short_units$DV
+yLABLOG <- paste0("log(", yLAB, ")")
+
+```
+
+
+```{r DV_PRED_IPRED_TIME_plots, message = FALSE}
+# DV, PRED and IPRED vs TIME (linear)
+dv_pred_ipred_time_linear <- data %>% 
+  dv_pred_ipred(
+    facets = c("STUDY", "ID"), 
+    id_per_plot = 9,
+    ncol = 3,
+    xlab = xTIME,
+    ylab = yLAB,
+    angle = 45
+  ) 
+
+# DV, PRED and IPRED vs TIME (log)
+dv_pred_ipred_time_log <- data %>% 
+  dv_pred_ipred(
+    facets = c("STUDY", "ID"), 
+    id_per_plot = 9,
+    ncol = 3,
+    xlab = xTIME,
+    ylab = yLABLOG,
+    angle = 45,
+    log_y = TRUE
+  ) 
+
+```
+
+## DV, PRED and IPRED versus TIME (linear scale)
+
+```{r print_DV_PRED_IPRED_TIME_plots_linear, eval = params$include_plots, include = params$include_plots, message = FALSE}
+walk(dv_pred_ipred_time_linear, print)
+```
+
+## DV, PRED and IPRED versus TIME (log scale)
+
+```{r print_DV_PRED_IPRED_TIME_plots_log, eval = params$include_plots, include = params$include_plots, message = FALSE}
+walk(dv_pred_ipred_time_log, print)
+
+```
+
+
+```{r save_DV_PRED_IPRED_TIME_plots, include = FALSE, eval = run_mrggsave, message = FALSE}
+mrggsave(dv_pred_ipred_time_linear, 
+         stem = "id-dv-pred-ipred-time-linear", 
+         width = 6, height = 7)
+
+mrggsave(dv_pred_ipred_time_log, 
+         stem = "id-dv-pred-ipred-time-log",
+         width = 6, height = 7)
+```
+
+```{r rm_DV_PRED_IPRED_TIME_plots, include = FALSE}
+rm(dv_pred_ipred_time_linear, dv_pred_ipred_time_log)
+```
+
+
+
+```{r DV_PRED_IPRED_TAD_plots, message = FALSE}
+# DV, PRED and IPRED vs TAD (linear)
+dv_pred_ipred_tad_linear <- data %>% 
+  dv_pred_ipred(
+    facets = c("STUDY", "ID"), 
+    x = pm_axis_tad(),
+    id_per_plot = 9,
+    ncol = 3,
+    xlab = xTAD,
+    ylab = yLAB,
+    angle = 45
+  ) 
+
+# DV, PRED and IPRED vs TAD (log)
+dv_pred_ipred_tad_log <- data %>% 
+  dv_pred_ipred(
+    facets = c("STUDY", "ID"), 
+    x = pm_axis_tad(),
+    id_per_plot = 9,
+    ncol = 3,
+    xlab = xTAD,
+    ylab = yLAB,
+    angle = 45,
+    log_y = TRUE
+  ) 
+
+```
+
+## DV, PRED and IPRED versus TAD (linear scale)
+
+```{r print_DV_PRED_IPRED_TAD_plots_linear, eval = params$include_plots, include = params$include_plots, message = FALSE}
+walk(dv_pred_ipred_tad_linear, print)
+```
+
+## DV, PRED and IPRED versus TAD (log scale)
+
+```{r print_DV_PRED_IPRED_TAD_plots_log, eval = params$include_plots, include = params$include_plots, message = FALSE}
+walk(dv_pred_ipred_tad_log, print)
+```
+
+```{r save_DV_PRED_IPRED_TAD_plots, include = FALSE, eval = run_mrggsave, message = FALSE}
+mrggsave(dv_pred_ipred_tad_linear, 
+         stem = "id-dv-pred-ipred-tad-linear", 
+         width = 6, height = 7)
+
+mrggsave(dv_pred_ipred_tad_log, 
+         stem = "id-dv-pred-ipred-tad-log",
+         width = 6, height = 7)
+```
+
+```{r rm_DV_PRED_IPRED_TAD_plots, include = FALSE}
+rm(dv_pred_ipred_tad_linear, dv_pred_ipred_tad_log)
+```
+
+
+
+
+## Session details
+
+```{r details, include = TRUE}
+date()
+sessionInfo()
+bbi_version()
+```
+

@@ -1,0 +1,45 @@
+CondNo:
+  abb: "Cond. no." 
+  def: condition number
+CI95:
+  abb: "CI" 
+  def: confidence intervals [2.5, 97.5]
+CP:
+  abb: CP 
+  def: Child-Pugh
+GeoMean: 
+  abb: GeoMean
+  def: geometric mean
+GeoSD:
+  abb: GeoSD
+  def: geometric standard deviation
+GFR:
+  abb: GFR
+  def: glomerular filtration rate
+IIV:
+  abb: IIV
+  def: interindividual variability
+LLOQ:
+  abb: LLOQ
+  def: lower limit of quantification
+IQR: 
+  abb: IQR
+  def: interquartile range
+Min: 
+  abb: Min
+  def: minimum
+Max: 
+  abb: Max
+  def: maximum
+nEDA:
+  abb: "n"
+  def: number of subjects summarized
+OBS:
+  abb: OBS
+  def: observations above the LLOQ
+OFV:
+  abb: OFV
+  def: objective function value
+SD: 
+  abb: SD
+  def: standard deviation

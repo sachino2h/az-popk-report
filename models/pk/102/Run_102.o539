@@ -1,0 +1,9 @@
+time="2024-07-12T15:50:47-04:00" level=info msg="Successfully loaded default configuration from /data/home/kyleb/project.mrg/az/current/models/pk/102/bbi.yaml"
+time="2024-07-12T15:50:47-04:00" level=info msg="Beginning Local Path"
+time="2024-07-12T15:50:47-04:00" level=info msg="A total of 1 models have completed the initial preparation phase"
+time="2024-07-12T15:50:47-04:00" level=info msg="[102] Beginning local work phase"
+time="2024-07-12T15:51:16-04:00" level=info msg="[102] Beginning cleanup phase"
+time="2024-07-12T15:51:16-04:00" level=info msg="[102] Cleanup completed"
+time="2024-07-12T15:51:16-04:00" level=info msg="Waiting for any post execution hooks to finish"
+time="2024-07-12T15:51:16-04:00" level=info msg="\r1 models completed in 29.404370598s"
+

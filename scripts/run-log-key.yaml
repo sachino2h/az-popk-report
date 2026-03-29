@@ -1,0 +1,8 @@
+102:
+  Covariates: "None"
+  Error: "Proportional"
+  IIV: "KA, CL/F, V2/F with covariance"
+106:
+  Covariates: "Weight, albumin, age, and EGFR effects on CL/F. Weight effects on V2/F, Q/F, and V3/F."
+  Error: "Proportional"
+  IIV: "KA, CL/F, V2/F with covariance"

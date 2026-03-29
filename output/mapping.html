@@ -1,0 +1,1848 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mapping Editor</title>
+  <style>
+    :root {
+      --bg: #f5efe7;
+      --bg-deep: #efe8df;
+      --panel: rgba(255, 255, 255, 0.86);
+      --panel-soft: rgba(252, 250, 247, 0.96);
+      --ink: #14202b;
+      --muted: #60707d;
+      --line: rgba(110, 132, 147, 0.24);
+      --line-strong: rgba(71, 111, 134, 0.34);
+      --line-soft: rgba(124, 148, 164, 0.14);
+      --accent: #0f8f84;
+      --accent-soft: rgba(15, 143, 132, 0.12);
+      --accent-deep: #0a625d;
+      --accent-warm: #ff8452;
+      --table-line: #dd8a2d;
+      --figure-line: #d45f8a;
+      --shadow: 0 22px 56px rgba(17, 31, 44, 0.10);
+      --shadow-soft: 0 14px 30px rgba(17, 31, 44, 0.06);
+      --radius: 20px;
+      --radius-soft: 14px;
+      --mono: "SFMono-Regular", "IBM Plex Mono", Consolas, Menlo, monospace;
+      --sans: "Avenir Next", "Segoe UI Variable", "Trebuchet MS", sans-serif;
+      --display: "Avenir Next", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: light;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(15, 143, 132, 0.20), transparent 27%),
+        radial-gradient(circle at top right, rgba(255, 132, 82, 0.18), transparent 22%),
+        radial-gradient(circle at 50% 100%, rgba(36, 89, 128, 0.12), transparent 36%),
+        linear-gradient(140deg, rgba(255, 255, 255, 0.40) 0%, rgba(255, 255, 255, 0) 48%),
+        linear-gradient(180deg, #faf7f2 0%, var(--bg) 52%, var(--bg-deep) 100%);
+      color: var(--ink);
+      font-family: var(--sans);
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 32, 43, 0.04) 1px, transparent 1px);
+      background-size: 100% 32px, 32px 100%;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.08));
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(15, 143, 132, 0.22), rgba(255, 132, 82, 0.18), transparent 75%);
+      pointer-events: none;
+    }
+
+    .title {
+      font-family: var(--display);
+      font-size: clamp(20px, 2vw, 24px);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      margin: 0;
+      max-width: none;
+    }
+
+    .meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line-soft);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      font-size: 10px;
+      color: #54636f;
+      font-family: var(--mono);
+      word-break: break-word;
+    }
+
+    .meta:empty {
+      display: none;
+    }
+
+    .toolbar,
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid rgba(100, 122, 138, 0.18);
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: var(--shadow-soft);
+      transition: background 140ms ease, border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 16px 28px rgba(10, 98, 93, 0.22);
+    }
+
+    .btn.primary:hover {
+      background: linear-gradient(135deg, #11a194 0%, #0a625d 100%);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      border-color: var(--line-strong);
+      box-shadow: 0 18px 34px rgba(17, 31, 44, 0.12);
+    }
+
+    .btn.small {
+      min-width: 30px;
+      min-height: 30px;
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+
+    .stats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 0;
+    }
+
+    .stat {
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      border-radius: 10px;
+      padding: 6px 8px 6px 10px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, var(--panel-soft) 100%);
+      min-width: 64px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .stat::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 7px;
+      bottom: 7px;
+      width: 2px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-warm));
+    }
+
+    .stat strong {
+      display: block;
+      font-family: var(--display);
+      font-size: 14px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .stat span {
+      font-size: 7px;
+      color: #576672;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.72fr) minmax(360px, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .editor,
+    .side {
+      display: grid;
+      gap: 18px;
+    }
+
+    .side {
+      position: sticky;
+      top: 18px;
+      align-self: start;
+    }
+
+    .intro-panel {
+      padding: 10px 12px;
+    }
+
+    .intro-shell {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .intro-meta-cluster {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .intro-meta-cluster .meta {
+      max-width: 100%;
+    }
+
+    .section {
+      padding: 16px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 19px;
+      font-family: var(--display);
+      letter-spacing: -0.03em;
+    }
+
+    .section-head p {
+      margin: 5px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .section-kicker {
+      display: inline-block;
+      margin-bottom: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent-deep);
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .top-actions .btn {
+      width: auto;
+      min-height: 34px;
+      justify-content: center;
+      font-size: 12px;
+      padding: 7px 12px;
+      white-space: nowrap;
+    }
+
+    .top-actions .btn.primary {
+      min-height: 36px;
+      font-size: 12px;
+    }
+
+    details.group {
+      border: 1px solid var(--line-soft);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(248, 250, 251, 0.94) 100%);
+      overflow: hidden;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    details.group[open] {
+      border-color: rgba(15, 143, 132, 0.18);
+      box-shadow: 0 14px 28px rgba(17, 31, 44, 0.06);
+    }
+
+    details.group > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+    }
+
+    details.group > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .summary-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .summary-note {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .summary-count {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(15, 143, 132, 0.12);
+      background: rgba(255, 255, 255, 0.8);
+      font-size: 11px;
+      color: #50616d;
+      white-space: nowrap;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    .group-body {
+      padding: 0 16px 16px;
+    }
+
+    .inline-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #4f5f6a;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid rgba(91, 116, 134, 0.16);
+      border-radius: 14px;
+      padding: 11px 12px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, #fbfdff 100%);
+      color: var(--ink);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus,
+    #asset-search:focus {
+      outline: none;
+      border-color: #8fb8cc;
+      box-shadow: 0 0 0 3px rgba(95, 149, 184, 0.14);
+      transform: translateY(-1px);
+    }
+
+    .field textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .block-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .block-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
+      overflow: hidden;
+      box-shadow: var(--shadow-soft);
+      transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .block-card[open] {
+      border-color: rgba(15, 143, 132, 0.18);
+      box-shadow: 0 18px 38px rgba(17, 31, 44, 0.08);
+    }
+
+    .block-card > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 252, 0.92) 100%);
+    }
+
+    .block-card > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .block-card > summary:hover {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(245, 250, 251, 0.96) 100%);
+    }
+
+    .block-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .block-meta {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .block-body {
+      padding: 0 16px 16px;
+      display: grid;
+      gap: 12px;
+      border-top: 1px solid rgba(15, 143, 132, 0.12);
+      background:
+        linear-gradient(180deg, rgba(247, 251, 252, 0.84) 0%, rgba(255, 255, 255, 0.98) 100%);
+    }
+
+    .block-grid {
+      display: grid;
+      grid-template-columns: 140px 120px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .dropzone {
+      border: 1.5px dashed var(--line-strong);
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 252, 0.94) 100%);
+      padding: 12px;
+      min-height: 74px;
+      transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+    }
+
+    .dropzone.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px rgba(10, 98, 93, 0.10);
+    }
+
+    .dropzone-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .mapped-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .mapped-file {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 6px 8px;
+      border: 1px solid rgba(104, 128, 144, 0.14);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #f6fbfc 100%);
+      font-size: 11px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    }
+
+    .mapped-name {
+      max-width: 250px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .mapped-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .preview {
+      min-height: 300px;
+      max-height: 70vh;
+      overflow: auto;
+      border-radius: 18px;
+      border: 1px solid rgba(22, 49, 70, 0.78);
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(180deg, #132331 0%, #101b25 100%);
+      background-size: 100% 24px, 24px 100%, auto;
+      color: #edf5fb;
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .asset-panel {
+      height: calc(100vh - 36px);
+      max-height: calc(100vh - 36px);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      min-height: 620px;
+    }
+
+    .asset-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: nowrap;
+      margin-bottom: 12px;
+      min-width: 0;
+    }
+
+    .asset-search-row {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: nowrap;
+      align-items: center;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .filter-pill {
+      border: 1px solid rgba(94, 118, 135, 0.16);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 7px 11px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+    }
+
+    .filter-pill.active {
+      background: linear-gradient(135deg, rgba(15, 143, 132, 0.18), rgba(255, 132, 82, 0.16));
+      color: var(--ink);
+      border-color: rgba(15, 143, 132, 0.18);
+    }
+
+    .filter-pill:hover {
+      transform: translateY(-1px);
+    }
+
+    .catalog {
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      padding-right: 2px;
+    }
+
+    .yaml-fab {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 30;
+      min-height: 48px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 18px 34px rgba(10, 98, 93, 0.24);
+      animation: yamlPulse 1.8s ease-in-out infinite;
+    }
+
+    .yaml-fab:hover {
+      transform: translateY(-1px);
+    }
+
+    .yaml-modal[hidden] {
+      display: none;
+    }
+
+    .yaml-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(16, 27, 37, 0.42);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .yaml-dialog {
+      width: min(920px, 100%);
+      max-height: min(78vh, 860px);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 28px 58px rgba(17, 31, 44, 0.22);
+    }
+
+    .yaml-dialog-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .yaml-dialog-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-family: var(--display);
+      letter-spacing: -0.03em;
+    }
+
+    .yaml-dialog-head p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .yaml-dialog-close {
+      min-width: 38px;
+      min-height: 38px;
+      padding: 0;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .yaml-dialog .preview {
+      min-height: 0;
+      max-height: none;
+      height: 100%;
+    }
+
+    @keyframes yamlPulse {
+      0%, 100% {
+        box-shadow: 0 18px 34px rgba(10, 98, 93, 0.24), 0 0 0 0 rgba(15, 143, 132, 0.28);
+      }
+
+      50% {
+        box-shadow: 0 18px 34px rgba(10, 98, 93, 0.24), 0 0 0 14px rgba(15, 143, 132, 0);
+      }
+    }
+
+    .asset-card {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      border: 1px solid rgba(104, 128, 144, 0.14);
+      border-radius: 16px;
+      padding: 10px;
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      cursor: grab;
+      transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+    }
+
+    .asset-card:hover {
+      transform: translateY(-1px);
+      border-color: var(--line-strong);
+      box-shadow: 0 8px 18px rgba(15, 35, 52, 0.06);
+    }
+
+    .asset-line {
+      width: 10px;
+      border-radius: 999px;
+      min-height: 52px;
+      background: var(--table-line);
+    }
+
+    .asset-card.figure .asset-line {
+      background: var(--figure-line);
+    }
+
+    .asset-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .asset-name {
+      font-size: 12px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .asset-kind {
+      flex: 0 0 auto;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(20, 32, 43, 0.06);
+      color: #4f606c;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .asset-path {
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+      word-break: break-word;
+    }
+
+    .empty {
+      padding: 12px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(241, 247, 251, 0.96) 0%, rgba(250, 252, 253, 0.98) 100%);
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+      border: 1px dashed rgba(104, 128, 144, 0.18);
+    }
+
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        position: static;
+      }
+
+      .asset-panel {
+        height: auto;
+        max-height: none;
+        min-height: 280px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .block-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .asset-tools {
+        flex-wrap: wrap;
+      }
+
+      .filter-row {
+        flex-wrap: wrap;
+        white-space: normal;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .app {
+        padding: 12px;
+      }
+
+      .intro-panel,
+      .section {
+        padding: 14px;
+      }
+
+      .intro-shell {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      .meta {
+        display: flex;
+      }
+
+      .top-actions {
+        justify-content: flex-start;
+      }
+
+      .yaml-modal {
+        padding: 14px;
+      }
+
+      .yaml-dialog {
+        max-height: 86vh;
+        padding: 14px;
+      }
+
+      .yaml-fab {
+        right: 14px;
+        bottom: 14px;
+      }
+
+      .inline-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="layout">
+      <main class="editor">
+        <section class="panel intro-panel">
+          <div class="intro-shell">
+            <div class="intro-copy">
+              <h1 class="title">Mapping Editor</h1>
+            </div>
+            <div class="intro-meta-cluster">
+              <div id="meta-line" class="meta"></div>
+            </div>
+            <div class="top-actions">
+              <button id="download-yaml" class="btn primary" type="button">Download YAML</button>
+              <button id="copy-yaml" class="btn" type="button">Copy YAML</button>
+              <button id="reset-yaml" class="btn" type="button">Reset</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <details class="group">
+            <summary>
+              <div>
+                <div class="section-kicker">Text Layer</div>
+                <div class="summary-title">Inline Values</div>
+                <div class="summary-note">Fill text placeholders only when needed.</div>
+              </div>
+              <div class="summary-count" id="inline-count-label">0 items</div>
+            </summary>
+            <div class="group-body">
+              <div id="inline-fields" class="inline-grid"></div>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Content Blocks</div>
+              <h2>Block Mappings</h2>
+              <p>Each block can stay collapsed until you need it. Use Add file or drag from the right side.</p>
+            </div>
+          </div>
+          <div id="block-list" class="block-list"></div>
+        </section>
+      </main>
+
+      <aside class="side">
+        <section class="panel section asset-panel">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Asset Browser</div>
+              <h2>Assets</h2>
+            </div>
+          </div>
+
+          <div class="asset-tools">
+            <div class="asset-search-row">
+              <input id="asset-search" type="search" placeholder="Search asset">
+            </div>
+            <div class="filter-row">
+              <button class="filter-pill active" data-filter="all" type="button">All</button>
+              <button class="filter-pill" data-filter="table" type="button">Tables</button>
+              <button class="filter-pill" data-filter="figure" type="button">Figures</button>
+            </div>
+          </div>
+
+          <div id="asset-catalog" class="catalog"></div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <button id="open-yaml-preview" class="yaml-fab" type="button">YAML Preview</button>
+
+  <div id="yaml-modal" class="yaml-modal" hidden>
+    <div class="yaml-dialog" role="dialog" aria-modal="true" aria-labelledby="yaml-dialog-title">
+      <div class="yaml-dialog-head">
+        <div>
+          <div class="section-kicker">Output</div>
+          <h2 id="yaml-dialog-title">YAML Preview</h2>
+          <p>Updates live.</p>
+        </div>
+        <button id="close-yaml-preview" class="btn yaml-dialog-close" type="button" aria-label="Close YAML preview">×</button>
+      </div>
+      <pre id="yaml-preview" class="preview"></pre>
+    </div>
+  </div>
+
+  <script id="mapping-data" type="application/json">{
+  "metadata": {
+    "generated_on": "2026-03-29 13:50:43 IST",
+    "template": "PopPK_Report_merge_TFL_filled_draft.docx",
+    "output_yaml": "output/mapping.yaml",
+    "output_html": "output/mapping.html"
+  },
+  "inline": {
+    "Study": "",
+    "Study and Dose": "",
+    "pc": "",
+    "dose-normalized": "",
+    "renal function": "",
+    " name of source data file ": "",
+    "4": "",
+    "pa": "",
+    "n": "",
+    "XX mg": "",
+    "Add any relevant observation across selected strata for table": "",
+    "fast/slow": "",
+    "specify relevant scope including patient population, age etc": "",
+    "list all clinical studies used": "",
+    "Title of MAR": "",
+    "add any additional studies": "",
+    "add selected strategy and justification": "",
+    "Add specific considerations/strategies used": "",
+    "dose": ""
+  },
+  "blocks": [
+    {
+      "name": "model run summary",
+      "type": "",
+      "title": "",
+      "footnote": "",
+      "status": "new",
+      "files": null
+    },
+    {
+      "name": "model bootstrap plot",
+      "type": "image",
+      "title": "",
+      "footnote": "",
+      "status": "new",
+      "files": null
+    },
+    {
+      "name": "categorical covariate summary ",
+      "type": "table",
+      "title": "",
+      "footnote": "",
+      "status": "new",
+      "files": null
+    },
+    {
+      "name": "eta pairs",
+      "type": "",
+      "title": "",
+      "footnote": "",
+      "status": "new",
+      "files": null
+    },
+    {
+      "name": "studies",
+      "type": "",
+      "title": "",
+      "footnote": "",
+      "status": "new",
+      "files": null
+    },
+    {
+      "name": "gof cwres ",
+      "type": "",
+      "title": "",
+      "footnote": "",
+      "status": "new",
+      "files": null
+    }
+  ],
+  "available_assets": {
+    "tables": [
+      {
+        "path": "results/table/eda/alt-pk-data-sum-dose-study.docx",
+        "name": "alt-pk-data-sum-dose-study.docx",
+        "kind": "table",
+        "dir": "results/table/eda",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/eda/alt-pk-data-sum-dose.docx",
+        "name": "alt-pk-data-sum-dose.docx",
+        "kind": "table",
+        "dir": "results/table/eda",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/eda/cont-cat-cov-sum-study.docx",
+        "name": "cont-cat-cov-sum-study.docx",
+        "kind": "table",
+        "dir": "results/table/eda",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/eda/cont-cov-sum-study.docx",
+        "name": "cont-cov-sum-study.docx",
+        "kind": "table",
+        "dir": "results/table/eda",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/eda/pk-data-sum-dose.docx",
+        "name": "pk-data-sum-dose.docx",
+        "kind": "table",
+        "dir": "results/table/eda",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/eda/rf-dose-study.docx",
+        "name": "rf-dose-study.docx",
+        "kind": "table",
+        "dir": "results/table/eda",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/102/102-pk-params.docx",
+        "name": "102-pk-params.docx",
+        "kind": "table",
+        "dir": "results/table/102",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/106/106-ebe-wtq.docx",
+        "name": "106-ebe-wtq.docx",
+        "kind": "table",
+        "dir": "results/table/106",
+        "extension": "docx"
+      },
+      {
+        "path": "results/table/106/106-pk-params-boot.docx",
+        "name": "106-pk-params-boot.docx",
+        "kind": "table",
+        "dir": "results/table/106",
+        "extension": "docx"
+      }
+    ],
+    "figures": [
+      {
+        "path": "results/figure/eda/conc-tad-linear.png",
+        "name": "conc-tad-linear.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/conc-tad-log.png",
+        "name": "conc-tad-log.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/conc-time-linear.png",
+        "name": "conc-time-linear.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/conc-time-log.png",
+        "name": "conc-time-log.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/cont-cat-hepatic.png",
+        "name": "cont-cat-hepatic.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/cont-cat-renal.png",
+        "name": "cont-cat-renal.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/cont-vs-cont.png",
+        "name": "cont-vs-cont.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/dn-conc-time-linear.png",
+        "name": "dn-conc-time-linear.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/eda/dn-conc-time-log.png",
+        "name": "dn-conc-time-log.png",
+        "kind": "figure",
+        "dir": "results/figure/eda",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/106/106-pk-vpc-blq.png",
+        "name": "106-pk-vpc-blq.png",
+        "kind": "figure",
+        "dir": "results/figure/106",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/106/106-pk-vpc-conc-blq.png",
+        "name": "106-pk-vpc-conc-blq.png",
+        "kind": "figure",
+        "dir": "results/figure/106",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/106/106-pk-vpc-dose-norm-cp.png",
+        "name": "106-pk-vpc-dose-norm-cp.png",
+        "kind": "figure",
+        "dir": "results/figure/106",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/106/106-pk-vpc-dose-norm-rf.png",
+        "name": "106-pk-vpc-dose-norm-rf.png",
+        "kind": "figure",
+        "dir": "results/figure/106",
+        "extension": "png"
+      },
+      {
+        "path": "results/figure/106/106-pk-vpc-dose-norm.png",
+        "name": "106-pk-vpc-dose-norm.png",
+        "kind": "figure",
+        "dir": "results/figure/106",
+        "extension": "png"
+      }
+    ]
+  }
+}</script>
+  <script>
+    const INITIAL_DATA = JSON.parse(document.getElementById("mapping-data").textContent);
+    let assetFilter = "all";
+
+    function normalizeMappingData(data) {
+      const safe = data || {};
+      const metadata = safe.metadata || {};
+      const inline = safe.inline || {};
+      const availableAssets = safe.available_assets || {};
+      const tables = Array.isArray(availableAssets.tables) ? availableAssets.tables : [];
+      const figures = Array.isArray(availableAssets.figures) ? availableAssets.figures : [];
+      const blocks = Array.isArray(safe.blocks) ? safe.blocks : [];
+
+      return {
+        metadata: {
+          generated_on: metadata.generated_on || "",
+          template: metadata.template || "",
+          output_yaml: metadata.output_yaml || "output/mapping.yaml",
+          output_html: metadata.output_html || "output/mapping.html"
+        },
+        inline: Object.fromEntries(
+          Object.entries(inline).map(([key, value]) => {
+            if (value && typeof value === "object" && !Array.isArray(value)) {
+              return [key, value.value == null ? "" : String(value.value)];
+            }
+            return [key, value == null ? "" : String(value)];
+          })
+        ),
+        available_assets: {
+          tables: tables.map(normalizeAsset).filter(Boolean),
+          figures: figures.map(normalizeAsset).filter(Boolean)
+        },
+        blocks: blocks.map(normalizeBlock)
+      };
+    }
+
+    function normalizeAsset(asset) {
+      if (!asset || (!asset.path && !asset.name)) {
+        return null;
+      }
+
+      return {
+        path: asset.path || asset.name,
+        name: asset.name || (asset.path ? asset.path.split("/").pop() : ""),
+        kind: asset.kind || "figure"
+      };
+    }
+
+    function normalizeBlock(block) {
+      const safe = block || {};
+      const normalizedType = safe.type === "figure" ? "image" : (safe.type || "");
+      return {
+        name: safe.name || "",
+        type: normalizedType,
+        title: safe.title || "",
+        footnote: safe.footnote || "",
+        status: safe.status || "new",
+        files: Array.isArray(safe.files) ? safe.files.filter((item) => item != null).map(String) : [],
+        open: Boolean(safe.title || safe.footnote || (Array.isArray(safe.files) && safe.files.length))
+      };
+    }
+
+    let state = normalizeMappingData(JSON.parse(JSON.stringify(INITIAL_DATA)));
+
+    const els = {
+      metaLine: document.getElementById("meta-line"),
+      inlineCountLabel: document.getElementById("inline-count-label"),
+      assetSearch: document.getElementById("asset-search"),
+      assetCatalog: document.getElementById("asset-catalog"),
+      inlineFields: document.getElementById("inline-fields"),
+      blockList: document.getElementById("block-list"),
+      openYamlPreview: document.getElementById("open-yaml-preview"),
+      closeYamlPreview: document.getElementById("close-yaml-preview"),
+      yamlModal: document.getElementById("yaml-modal"),
+      yamlPreview: document.getElementById("yaml-preview"),
+      downloadYaml: document.getElementById("download-yaml"),
+      copyYaml: document.getElementById("copy-yaml"),
+      resetYaml: document.getElementById("reset-yaml")
+    };
+
+    function getCatalog() {
+      return [
+        ...state.available_assets.tables,
+        ...state.available_assets.figures
+      ];
+    }
+
+    function getMappedAssetPathSet() {
+      const mapped = new Set();
+      (state.blocks || []).forEach((block) => {
+        const files = Array.isArray(block.files) ? block.files : [];
+        files.forEach((path) => mapped.add(path));
+      });
+      return mapped;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function yamlQuote(value) {
+      return `'${String(value ?? "").replace(/'/g, "''")}'`;
+    }
+
+    function yamlFieldLines(key, value, indent = 0) {
+      const normalizedValue = String(value ?? "").replace(/\r\n?/g, "\n");
+      const prefix = `${" ".repeat(indent)}${yamlQuote(key)}:`;
+
+      if (!normalizedValue.includes("\n")) {
+        return [`${prefix} ${yamlQuote(normalizedValue)}`];
+      }
+
+      const chomp = normalizedValue.endsWith("\n") ? "|" : "|-";
+      const lineValues = normalizedValue.split("\n");
+      return [
+        `${prefix} ${chomp}`,
+        ...lineValues.map((line) => `${" ".repeat(indent + 2)}${line}`)
+      ];
+    }
+
+    function getFileName(value) {
+      return String(value ?? "").split(/[\\/]/).pop() || "";
+    }
+
+    function blockByName(name) {
+      return state.blocks.find((block) => block.name === name);
+    }
+
+    function assetByPath(path) {
+      return getCatalog().find((asset) => asset.path === path);
+    }
+
+    function assetLabel(path) {
+      const asset = assetByPath(path);
+      return asset ? asset.name : String(path).split("/").pop();
+    }
+
+    function assetKindForBlockType(type) {
+      if (type === "image") {
+        return "figure";
+      }
+
+      if (type === "table") {
+        return type;
+      }
+
+      return "";
+    }
+
+    function availableAssetsForBlock(block) {
+      const files = Array.isArray(block.files) ? block.files : [];
+      const mappedPaths = getMappedAssetPathSet();
+      const expectedAssetKind = assetKindForBlockType(block.type);
+
+      return getCatalog().filter((asset) => {
+        if (expectedAssetKind && asset.kind !== expectedAssetKind) {
+          return false;
+        }
+
+        if (mappedPaths.has(asset.path) && !files.includes(asset.path)) {
+          return false;
+        }
+
+        return !files.includes(asset.path);
+      });
+    }
+
+    function renderSummary() {
+      els.metaLine.textContent = `Template: ${state.metadata.template} | Generated: ${state.metadata.generated_on}`;
+      els.inlineCountLabel.textContent = `${Object.keys(state.inline).length} items`;
+    }
+
+    function renderAssetCatalog() {
+      const query = els.assetSearch.value.trim().toLowerCase();
+      const mappedPaths = getMappedAssetPathSet();
+      const items = getCatalog().filter((asset) => {
+        if (mappedPaths.has(asset.path)) {
+          return false;
+        }
+
+        if (assetFilter !== "all" && asset.kind !== assetFilter) {
+          return false;
+        }
+
+        if (!query) {
+          return true;
+        }
+
+        return `${asset.name} ${asset.path}`.toLowerCase().includes(query);
+      });
+
+      if (!items.length) {
+        els.assetCatalog.innerHTML = '<div class="empty">No assets found.</div>';
+        return;
+      }
+
+      els.assetCatalog.innerHTML = items.map((asset) => `
+        <div class="asset-card ${escapeHtml(asset.kind)}" draggable="true" data-asset-path="${escapeHtml(asset.path)}">
+          <div class="asset-line"></div>
+          <div>
+            <div class="asset-head">
+              <div class="asset-name">${escapeHtml(asset.name)}</div>
+              <div class="asset-kind">${escapeHtml(asset.kind)}</div>
+            </div>
+            <div class="asset-path">${escapeHtml(asset.path)}</div>
+          </div>
+        </div>
+      `).join("");
+
+      els.assetCatalog.querySelectorAll("[data-asset-path]").forEach((card) => {
+        card.addEventListener("dragstart", (event) => {
+          event.dataTransfer.setData("text/plain", card.dataset.assetPath);
+          event.dataTransfer.effectAllowed = "copy";
+        });
+      });
+    }
+
+    function renderInlineFields() {
+      const entries = Object.entries(state.inline);
+
+      if (!entries.length) {
+        els.inlineFields.innerHTML = '<div class="empty">No inline placeholders found.</div>';
+        return;
+      }
+
+      els.inlineFields.innerHTML = entries.map(([key, value]) => `
+        <div class="field">
+          <label for="inline-${escapeHtml(key)}">${escapeHtml(key)}</label>
+          <input id="inline-${escapeHtml(key)}" type="text" data-inline-key="${escapeHtml(key)}" value="${escapeHtml(value)}">
+        </div>
+      `).join("");
+
+      els.inlineFields.querySelectorAll("[data-inline-key]").forEach((input) => {
+        input.addEventListener("input", () => {
+          state.inline[input.dataset.inlineKey] = input.value;
+          renderYamlPreview();
+        });
+      });
+    }
+
+    function renderBlocks() {
+      if (!state.blocks.length) {
+        els.blockList.innerHTML = '<div class="empty">No block placeholders found.</div>';
+        return;
+      }
+
+      els.blockList.innerHTML = state.blocks.map((block, index) => {
+        const files = Array.isArray(block.files) ? block.files : [];
+        const available = availableAssetsForBlock(block);
+        const mappedCount = files.length ? `${files.length} file${files.length > 1 ? "s" : ""}` : "empty";
+
+        const mappedFiles = files.length
+          ? files.map((filePath, fileIndex) => `
+              <div class="mapped-file">
+                <span class="mapped-name" title="${escapeHtml(filePath)}">${escapeHtml(assetLabel(filePath))}</span>
+                <div class="mapped-actions">
+                  <button class="btn small" type="button" data-move-up="${escapeHtml(block.name)}::${fileIndex}">↑</button>
+                  <button class="btn small" type="button" data-move-down="${escapeHtml(block.name)}::${fileIndex}">↓</button>
+                  <button class="btn small" type="button" data-remove-file="${escapeHtml(block.name)}::${escapeHtml(filePath)}">×</button>
+                </div>
+              </div>
+            `).join("")
+          : '<div class="empty">No files mapped.</div>';
+
+        return `
+          <details class="block-card" data-block-name="${escapeHtml(block.name)}" ${block.open ? "open" : ""}>
+            <summary>
+              <div>
+                <div class="block-title">${escapeHtml(block.name || `Block ${index + 1}`)}</div>
+                <div class="block-meta">${escapeHtml(mappedCount)}</div>
+              </div>
+              <div class="summary-count">${escapeHtml(block.type || "not set")}</div>
+            </summary>
+
+            <div class="block-body">
+              <div class="block-grid">
+                <div class="field">
+                  <label>Type</label>
+                  <select data-block-field="type">
+                    <option value="" ${block.type === "" ? "selected" : ""}>Not set</option>
+                    <option value="image" ${block.type === "image" ? "selected" : ""}>Image</option>
+                    <option value="table" ${block.type === "table" ? "selected" : ""}>Table</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Status</label>
+                  <select data-block-field="status">
+                    <option value="new" ${block.status === "new" ? "selected" : ""}>new</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Add file</label>
+                  <div class="toolbar">
+                    <select data-add-select>
+                      <option value="">Select asset</option>
+                      ${available.map((asset) => `<option value="${escapeHtml(asset.path)}">${escapeHtml(asset.name)}</option>`).join("")}
+                    </select>
+                    <button class="btn small" type="button" data-add-button>Add</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Title</label>
+                <textarea data-block-field="title">${escapeHtml(block.title)}</textarea>
+              </div>
+
+              <div class="field">
+                <label>Footnote</label>
+                <textarea data-block-field="footnote">${escapeHtml(block.footnote)}</textarea>
+              </div>
+
+              <div class="dropzone" data-dropzone="${escapeHtml(block.name)}">
+                <div class="dropzone-label">Drop asset here or use Add file above.</div>
+                <div class="mapped-list">${mappedFiles}</div>
+              </div>
+            </div>
+          </details>
+        `;
+      }).join("");
+
+      bindBlockEvents();
+    }
+
+    function bindBlockEvents() {
+      els.blockList.querySelectorAll(".block-card").forEach((card) => {
+        const block = blockByName(card.dataset.blockName);
+        if (!block) {
+          return;
+        }
+
+        card.addEventListener("toggle", () => {
+          block.open = card.open;
+        });
+
+        card.querySelectorAll("[data-block-field]").forEach((field) => {
+          field.addEventListener("input", () => {
+            block[field.dataset.blockField] = field.value;
+            renderYamlPreview();
+          });
+
+          field.addEventListener("change", () => {
+            block[field.dataset.blockField] = field.value;
+            block.open = true;
+            if (field.dataset.blockField === "type" || field.dataset.blockField === "status") {
+              renderBlocks();
+            } else {
+              renderYamlPreview();
+            }
+          });
+        });
+
+        const select = card.querySelector("[data-add-select]");
+        const addButton = card.querySelector("[data-add-button]");
+        addButton.addEventListener("click", () => {
+          if (select.value) {
+            addAssetToBlock(block.name, select.value);
+          }
+        });
+
+        const dropzone = card.querySelector("[data-dropzone]");
+        dropzone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          dropzone.classList.add("active");
+          if (!card.open) {
+            card.open = true;
+            block.open = true;
+          }
+        });
+
+        dropzone.addEventListener("dragleave", () => {
+          dropzone.classList.remove("active");
+        });
+
+        dropzone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          dropzone.classList.remove("active");
+          const assetPath = event.dataTransfer.getData("text/plain");
+          if (assetPath) {
+            addAssetToBlock(block.name, assetPath);
+          }
+        });
+
+        card.querySelectorAll("[data-remove-file]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const separator = button.dataset.removeFile.indexOf("::");
+            const blockName = button.dataset.removeFile.slice(0, separator);
+            const filePath = button.dataset.removeFile.slice(separator + 2);
+            const target = blockByName(blockName);
+            if (!target) {
+              return;
+            }
+            target.files = target.files.filter((path) => path !== filePath);
+            target.open = true;
+            renderBlocks();
+            renderYamlPreview();
+          });
+        });
+
+        card.querySelectorAll("[data-move-up]").forEach((button) => {
+          button.addEventListener("click", () => moveFile(button.dataset.moveUp, -1));
+        });
+
+        card.querySelectorAll("[data-move-down]").forEach((button) => {
+          button.addEventListener("click", () => moveFile(button.dataset.moveDown, 1));
+        });
+      });
+    }
+
+    function moveFile(token, direction) {
+      const separator = token.indexOf("::");
+      const blockName = token.slice(0, separator);
+      const index = Number(token.slice(separator + 2));
+      const block = blockByName(blockName);
+
+      if (!block || !Array.isArray(block.files)) {
+        return;
+      }
+
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= block.files.length) {
+        return;
+      }
+
+      const files = [...block.files];
+      const temp = files[index];
+      files[index] = files[nextIndex];
+      files[nextIndex] = temp;
+      block.files = files;
+      block.open = true;
+
+      renderBlocks();
+      renderYamlPreview();
+    }
+
+    function addAssetToBlock(blockName, assetPath) {
+      const block = blockByName(blockName);
+      if (!block) {
+        return;
+      }
+
+      const alreadyMappedElsewhere = (state.blocks || []).some((candidate) => {
+        if (!candidate || candidate.name === blockName) {
+          return false;
+        }
+        const files = Array.isArray(candidate.files) ? candidate.files : [];
+        return files.includes(assetPath);
+      });
+      if (alreadyMappedElsewhere) {
+        return;
+      }
+
+      if (!Array.isArray(block.files)) {
+        block.files = [];
+      }
+
+      if (!block.files.includes(assetPath)) {
+        block.files.push(assetPath);
+      }
+
+      block.open = true;
+      renderBlocks();
+      renderYamlPreview();
+    }
+
+    function buildYaml() {
+      const tableNames = state.available_assets.tables.map((asset) => getFileName(asset.name || asset.path));
+      const figureNames = state.available_assets.figures.map((asset) => getFileName(asset.name || asset.path));
+      const lines = [
+        "# ============================================================================",
+        "# Mapping file generated by scripts/generate-mapping.R",
+        `# Generated on: ${state.metadata.generated_on}`,
+        `# Template: ${state.metadata.template}`,
+        "#",
+        "# Copy any commented asset filename below into any block files list when needed.",
+        "# ============================================================================",
+        "#"
+      ];
+
+      function addCommentSection(title, items) {
+        lines.push(`# ${title}`);
+        if (!items.length) {
+          lines.push("#   (none found)");
+        } else {
+          items.forEach((item) => lines.push(`#   - ${item}`));
+        }
+        lines.push("#");
+      }
+
+      addCommentSection("Available tables", tableNames);
+      addCommentSection("Available figures", figureNames);
+
+      lines.push("metadata:");
+      lines.push(...yamlFieldLines("generated_on", state.metadata.generated_on, 2));
+      lines.push(...yamlFieldLines("template", state.metadata.template, 2));
+      lines.push(...yamlFieldLines("output_yaml", state.metadata.output_yaml, 2));
+      lines.push(...yamlFieldLines("output_html", state.metadata.output_html, 2));
+
+      const inlineEntries = Object.entries(state.inline);
+      if (!inlineEntries.length) {
+        lines.push("", "inline: {}");
+      } else {
+        lines.push("", "inline:");
+        inlineEntries.forEach(([key, value]) => {
+          lines.push(`  ${yamlQuote(key)}:`);
+          lines.push(...yamlFieldLines("type", "text", 4));
+          lines.push(...yamlFieldLines("status", "new", 4));
+          lines.push(...yamlFieldLines("value", value, 4));
+        });
+      }
+
+      if (!state.blocks.length) {
+        lines.push("", "blocks: {}");
+      } else {
+        lines.push("", "blocks:");
+        state.blocks.forEach((block, index) => {
+          const files = Array.isArray(block.files) ? block.files : [];
+          lines.push(`  ${yamlQuote(block.name)}:`);
+          lines.push(...yamlFieldLines("type", block.type, 4));
+          lines.push(...yamlFieldLines("title", block.title, 4));
+          lines.push(...yamlFieldLines("footnote", block.footnote, 4));
+          lines.push(...yamlFieldLines("status", block.status, 4));
+
+          if (!files.length) {
+            lines.push("    files: []");
+          } else {
+            lines.push("    files:");
+            files.forEach((filePath) => lines.push(`      - ${yamlQuote(getFileName(filePath))}`));
+          }
+
+          if (index < state.blocks.length - 1) {
+            lines.push("");
+          }
+        });
+      }
+
+      return lines.join("\n");
+    }
+
+    function renderYamlPreview() {
+      els.yamlPreview.textContent = buildYaml();
+    }
+
+    function openYamlPreview() {
+      els.yamlModal.hidden = false;
+    }
+
+    function closeYamlPreview() {
+      els.yamlModal.hidden = true;
+    }
+
+    function downloadYaml() {
+      const blob = new Blob([buildYaml()], { type: "text/yaml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "mapping.yaml";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyYaml() {
+      const text = buildYaml();
+
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const area = document.createElement("textarea");
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      document.body.removeChild(area);
+    }
+
+    function resetState() {
+      state = normalizeMappingData(JSON.parse(JSON.stringify(INITIAL_DATA)));
+      renderAll();
+    }
+
+    function renderAll() {
+      renderSummary();
+      renderAssetCatalog();
+      renderInlineFields();
+      renderBlocks();
+      renderYamlPreview();
+    }
+
+    document.querySelectorAll("[data-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        assetFilter = button.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        renderAssetCatalog();
+      });
+    });
+
+    els.assetSearch.addEventListener("input", renderAssetCatalog);
+    els.openYamlPreview.addEventListener("click", openYamlPreview);
+    els.closeYamlPreview.addEventListener("click", closeYamlPreview);
+    els.yamlModal.addEventListener("click", (event) => {
+      if (event.target === els.yamlModal) {
+        closeYamlPreview();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !els.yamlModal.hidden) {
+        closeYamlPreview();
+      }
+    });
+    els.downloadYaml.addEventListener("click", downloadYaml);
+    els.copyYaml.addEventListener("click", async () => {
+      try {
+        await copyYaml();
+        els.copyYaml.textContent = "Copied";
+      } catch (error) {
+        els.copyYaml.textContent = "Copy failed";
+      }
+
+      window.setTimeout(() => {
+        els.copyYaml.textContent = "Copy YAML";
+      }, 1200);
+    });
+    els.resetYaml.addEventListener("click", resetState);
+
+    renderAll();
+  </script>
+</body>
+</html>

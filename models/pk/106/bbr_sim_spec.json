@@ -1,0 +1,12 @@
+{
+  "sim_spec": {
+    "problem": ["Simulation of model 106"],
+    "seed": [1234],
+    "n_sim": [300],
+    "model_path": ["/data/home/kyleb/project.mrg/az/current/models/pk/106/106-sim.ctl"],
+    "based_on_model_path": ["/data/home/kyleb/project.mrg/az/current/models/pk/106"],
+    "based_on_data_path": ["/data/home/kyleb/project.mrg/az/current/models/pk/106/sim-data.csv"],
+    "model_md5": ["728559279ac6653356ca7cb414ec8ce7"],
+    "output_dir": ["/data/home/kyleb/project.mrg/az/current/models/pk/106"]
+  }
+}

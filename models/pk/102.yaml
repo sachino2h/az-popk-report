@@ -1,0 +1,9 @@
+model_type: nonmem
+model_path: 102.ctl
+notes:
+- Allometric scaling with weight reduces eta-V2 correlation with weight. Will consider
+  additional RUV structures
+- Proportional RUV performed best over additive (103) and combined (104)
+description: Two-compartment model with first-order absorption and linear elimination.
+star:
+- yes

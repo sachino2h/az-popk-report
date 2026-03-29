@@ -1,0 +1,45 @@
+Version: 1
+
+Packages:
+  - tidyverse
+  - here
+  - patchwork
+  - yspec
+  - pmtables
+  - pmplots
+  - bbr
+  - markdown
+  - rmarkdown
+  - mrgmisc
+  - pmforest
+  - mrggsave
+  - GGally
+  - pmparams
+  - latex2exp
+  - sessioninfo
+  - cowplot
+  - pmparams
+  - magick
+  - pdftools
+  - vpc
+  - mrgsolve
+  - simpar
+  - texPreview
+  - qctools
+  - gt
+  - officer
+  
+Repos:
+  - MPN: https://mpn.metworx.com/snapshots/stable/2025-06-16
+  # - CRAN: https://packagemanager.posit.co/cran/2025-06-16 # recommend using dated snapshots for CRAN too, if needed
+    
+Customizations:
+  Packages:
+    - bbr:
+        Suggests: true
+
+Lockfile:
+    Type: renv
+
+Rpath: ${R_EXE_4_4}
+

@@ -1,19 +1,15 @@
 ==========================================================================================
-YAML AUDIT SESSION: session_2026-03-30_11-35-19
-Started At: 2026-03-30 11:35:19 +0530
+YAML AUDIT SESSION: session_2026-03-30_12-53-27
+Started At: 2026-03-30 12:53:27 +0530
 YAML Path: /Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/mapping.yaml
 ==========================================================================================
 
 ------------------------------------------------------------------------------------------
-[2026-03-30 11:35:20 +0530] [IMPORTANT] generate_mapping_yaml completed
-  - yaml_path=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/mapping.yaml
-------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------
-[2026-03-30 11:35:38 +0530] [IMPORTANT] generate_magic_doc(from_template) completed
+[2026-03-30 12:53:27 +0530] [IMPORTANT] generate_magic_doc(from_template) completed
   - output_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
-[2026-03-30 11:36:43 +0530] [IMPORTANT] sync_review_yaml(doc_to_yaml) completed
+[2026-03-30 12:54:16 +0530] [IMPORTANT] sync_review_yaml(doc_to_yaml) completed
   - context=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
   - blocks_added=0
   - blocks_deleted=0
@@ -23,19 +19,13 @@ YAML Path: /Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/mappi
   - inline_updated=0
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
-[2026-03-30 11:36:43 +0530] [IMPORTANT] YAML field-level updates
+[2026-03-30 12:54:17 +0530] [IMPORTANT] YAML field-level updates
   - context=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
   - blocks.model run summary.status: 'new' -> 'unchanged'
   - blocks.model bootstrap plot.status: 'new' -> 'unchanged'
   - blocks.categorical covariate summary .status: 'new' -> 'unchanged'
   - blocks.eta pairs.status: 'new' -> 'unchanged'
   - blocks.studies.status: 'new' -> 'unchanged'
-  - blocks.gof cwres .title: 'GOF CWRES plot' -> 'GOF CWRES  O sfdjkhjdfs plot'
+  - blocks.gof cwres .footnote: 'Conditional weighted residuals versus time.' -> 'Not having l weighted residuals versus time.'
   - blocks.gof cwres .status: 'new' -> 'updated'
-------------------------------------------------------------------------------------------
-------------------------------------------------------------------------------------------
-[2026-03-30 11:37:07 +0530] [IMPORTANT] sync_review_yaml(yaml_to_doc) completed
-  - review_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
-  - output_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
-  - note=YAML not modified in yaml_to_doc mode
 ------------------------------------------------------------------------------------------

@@ -22,23 +22,47 @@ detect_doc_tag_type <- function(raw_tag, clean_value) {
 
 extract_tag_pairs_from_doc <- function(file_path, patterns = c("<<>>", "{{}}")) {
   doc <- read_docx(file_path)
-  doc_data <- docx_summary(doc)
-  doc_text <- paste(doc_data$text, collapse = " ")
-  
+  body_xml <- officer::docx_body_xml(doc)
+  ns <- xml2::xml_ns(body_xml)
+  paragraphs <- xml2::xml_find_all(body_xml, ".//w:p", ns)
+
+  paragraph_texts <- character(0)
+  if (length(paragraphs) > 0) {
+    paragraph_texts <- vapply(
+      paragraphs,
+      function(p) {
+        text_nodes <- xml2::xml_find_all(p, ".//w:t", ns)
+        if (length(text_nodes) == 0) return("")
+        paste(xml2::xml_text(text_nodes), collapse = "")
+      },
+      character(1)
+    )
+    paragraph_texts <- paragraph_texts[nzchar(paragraph_texts)]
+  }
+
+  if (length(paragraph_texts) == 0) {
+    # Fallback for unusual docs where paragraph-level extraction is empty.
+    doc_data <- docx_summary(doc)
+    paragraph_texts <- doc_data$text
+    paragraph_texts <- paragraph_texts[!is.na(paragraph_texts) & nzchar(paragraph_texts)]
+  }
+
   out <- list()
-  
-  for (p in patterns) {
-    if (p == "<<>>") {
-      rx <- "<<(.*?)>>"
-    } else if (p == "{{}}") {
-      rx <- "\\{\\{(.*?)\\}\\}"
-    } else {
-      stop(paste("Unsupported pattern:", p), call. = FALSE)
-    }
-    
-    matches <- stringr::str_match_all(doc_text, rx)[[1]]
-    
-    if (nrow(matches) > 0) {
+  for (doc_text in paragraph_texts) {
+    for (p in patterns) {
+      if (p == "<<>>") {
+        rx <- "<<(.*?)>>"
+      } else if (p == "{{}}") {
+        rx <- "\\{\\{(.*?)\\}\\}"
+      } else {
+        stop(paste("Unsupported pattern:", p), call. = FALSE)
+      }
+
+      matches <- stringr::str_match_all(doc_text, rx)[[1]]
+      if (nrow(matches) == 0) {
+        next
+      }
+
       extracted_values <- matches[, 2]
       clean_values <- vapply(extracted_values, normalize_doc_key, character(1))
       tag_values <- vapply(
@@ -48,14 +72,14 @@ extract_tag_pairs_from_doc <- function(file_path, patterns = c("<<>>", "{{}}")) 
       )
 
       out[[length(out) + 1]] <- data.frame(
-        tag   = tag_values,
-        raw   = matches[, 1],
+        tag = tag_values,
+        raw = matches[, 1],
         clean = clean_values,
         stringsAsFactors = FALSE
       )
     }
   }
-  
+
   if (length(out) == 0) {
     return(data.frame(
       tag = character(0),

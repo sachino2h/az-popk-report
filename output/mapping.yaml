@@ -197,8 +197,8 @@ blocks:
 
   'gof cwres ':
     'type': 'image'
-    'title': 'GOF CWRES  O sfdjkhjdfs plot'
-    'footnote': 'H sfj sf nlasd ,sdf sfkl lsdfkldfslk l '
+    'title': 'GOF CWRES plot'
+    'footnote': 'Not having l weighted residuals versus time.'
     'status': 'updated'
     files:
       - dn-conc-time-linear.png

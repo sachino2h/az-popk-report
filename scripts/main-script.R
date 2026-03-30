@@ -402,7 +402,7 @@ specific_template_result <- generate_magic_doc(
 # (keeps missing markers/red color rules in sync for review).
 sync_review_yaml(
   config = config,
-  mode = "yaml_to_doc",
+  mode = "doc_to_yaml",
   reviewDocPath = config$paths$magic_doc_out
 )
 

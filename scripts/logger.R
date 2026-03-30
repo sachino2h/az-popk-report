@@ -442,7 +442,11 @@ append_audit_log <- function(config, severity = "IMPORTANT", event, details = ch
   severity <- toupper(as.character(severity %||% "IMPORTANT"))
   if (!nzchar(severity)) severity <- "IMPORTANT"
 
-  lines <- c(paste0("[", ts, "] [", severity, "] ", event))
+  sep <- strrep("-", 90)
+  lines <- c(
+    sep,
+    paste0("[", ts, "] [", severity, "] ", event)
+  )
   if (length(details) > 0) {
     details <- as.character(details)
     details <- details[!is.na(details) & nzchar(trimws(details))]
@@ -450,7 +454,7 @@ append_audit_log <- function(config, severity = "IMPORTANT", event, details = ch
       lines <- c(lines, paste0("  - ", details))
     }
   }
-  lines <- c(lines, "")
+  lines <- c(lines, sep, "")
   cat(paste(lines, collapse = "\n"), file = log_path, append = TRUE)
   invisible(log_path)
 }

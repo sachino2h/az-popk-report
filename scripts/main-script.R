@@ -392,13 +392,13 @@ build_report_extended_with_audit <- function(
 # Start a fresh audit session folder + LOGS.txt for this run.
 generate_mapping_yaml(config)
 
-# Build intermediate "Specific" DOC from template tags + YAML values.
-magic_result <- generate_magic_doc(
+# Build the Specific template from meta-template tags + YAML values.
+specific_template_result <- generate_magic_doc(
   config = config,
   mode = "from_template"
 )
 
-# Re-sync YAML placeholders into the Specific DOC
+# Re-sync YAML placeholders into the Specific template
 # (keeps missing markers/red color rules in sync for review).
 sync_review_yaml(
   config = config,
@@ -408,37 +408,37 @@ sync_review_yaml(
 
 # Stage all report assets (tables/figures) into single folders for reportifyr.
 dir.create(config$paths$report_out_dir, recursive = TRUE, showWarnings = FALSE)
-staged_assets <- stage_reportifyr_assets(config)
+staged_report_assets <- stage_reportifyr_assets(config)
 
-# Generate versioned review report with actual inserted assets/content. (Compiled File)
-forward_result <- build_report_extended_with_audit(
+# Generate the versioned Compiled file with actual inserted assets/content.
+compiled_file_result <- build_report_extended_with_audit(
   config = config,
   docx_in = config$paths$magic_doc_out,
   docx_out = file.path(config$paths$report_out_dir, "report_v002.docx"),
-  figures_path = staged_assets$figures_path,
-  tables_path = staged_assets$tables_path,
+  figures_path = staged_report_assets$figures_path,
+  tables_path = staged_report_assets$tables_path,
   yaml_in = config$paths$mapping_yaml,
   config_yaml = here::here("report", "config.yml"),
   version = 2,
   versions_root = config$paths$report_out_dir
 )
 
-# Backward basic step: update YAML from latest reviewed report.
+# Backward step: update YAML from latest reviewed Compiled file.
 # Point this path to the reviewed file received back from user.
-latest_reviewed_doc <- file.path(config$paths$report_out_dir, "v002", "report_v002.docx")
-# Parse reviewed report (with hidden markers) and update YAML values/status.
-yaml_update_result <- update_yaml_from_reviewed_doc(
+reviewed_compiled_doc_path <- file.path(config$paths$report_out_dir, "v002", "report_v002.docx")
+# Parse reviewed compiled file (with hidden markers) and update YAML values/status.
+yaml_sync_from_review_result <- update_yaml_from_reviewed_doc(
   config = config,
-  latest_reviewed_doc = latest_reviewed_doc,
+  latest_reviewed_doc = reviewed_compiled_doc_path,
   add_new_blocks = FALSE
 )
 
-# Regenerate intermediate specific DOC from reviewed output + updated YAML
-# This recreates tag-only intermediate for the next review iteration.
-magic_round2_result <- generate_magic_doc(
+# Regenerate the Specific template from reviewed output + updated YAML.
+# This recreates tag-only specific template for the next review iteration.
+specific_template_round2_result <- generate_magic_doc(
   config = config,
   mode = "from_reviewed_output",
-  reviewed_doc_path = latest_reviewed_doc,
+  reviewed_doc_path = reviewed_compiled_doc_path,
   output_doc_path = config$paths$magic_doc_out,
   mark_missing_in_reviewed_output = TRUE
 )

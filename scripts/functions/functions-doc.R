@@ -664,6 +664,58 @@ color_missing_runs_red <- function(doc) {
   doc
 }
 
+clear_stale_missing_red_in_placeholder_runs <- function(doc) {
+  body_xml <- docx_body_xml(doc)
+  ns <- xml2::xml_ns(body_xml)
+  paragraphs <- xml2::xml_find_all(body_xml, ".//w:p", ns)
+
+  if (length(paragraphs) == 0) {
+    return(doc)
+  }
+
+  for (paragraph in paragraphs) {
+    text_nodes <- xml2::xml_find_all(paragraph, ".//w:t", ns)
+    if (length(text_nodes) == 0) {
+      next
+    }
+
+    full_text <- paste(vapply(text_nodes, xml2::xml_text, character(1)), collapse = "")
+    if (!nzchar(full_text)) {
+      next
+    }
+
+    has_placeholder <- grepl("<<", full_text, fixed = TRUE) || grepl("{{", full_text, fixed = TRUE)
+    has_missing <- grepl("MISSING(?:_VALUE)?\\(", full_text, perl = TRUE)
+    if (!has_placeholder || has_missing) {
+      next
+    }
+
+    run_nodes <- xml2::xml_find_all(paragraph, ".//w:r", ns)
+    if (length(run_nodes) == 0) {
+      next
+    }
+
+    for (run_node in run_nodes) {
+      color_node <- xml2::xml_find_first(run_node, "./w:rPr/w:color", ns)
+      if (inherits(color_node, "xml_missing")) {
+        next
+      }
+
+      color_val <- xml2::xml_attr(color_node, "val")
+      if (is.na(color_val) || !nzchar(color_val)) {
+        color_val <- xml2::xml_attr(color_node, "w:val")
+      }
+      if (is.na(color_val) || !identical(toupper(color_val), "FF0000")) {
+        next
+      }
+
+      xml2::xml_remove(color_node)
+    }
+  }
+
+  doc
+}
+
 add_hidden_ids_to_doc <- function(doc, replacements_df) {
   if (nrow(replacements_df) == 0) {
     return(doc)
@@ -2887,6 +2939,7 @@ sync_yaml_to_review_doc <- function(yaml_path, review_doc_path, output_doc_path 
     doc <- add_hidden_ids_to_doc(doc, block_replacements_df)
   }
   doc <- add_hidden_inline_ids_to_doc(doc, yml_data)
+  doc <- clear_stale_missing_red_in_placeholder_runs(doc)
   doc <- color_missing_runs_red(doc)
 
   print(doc, target = output_doc_path)

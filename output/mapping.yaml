@@ -52,8 +52,6 @@ metadata:
   'output_yaml': 'output/mapping.yaml'
   'output_html': 'output/mapping.html'
 
-  current_version: 'v002'
-  version_number: 2
 inline:
   'Study':
     'id': 'inl_study'
@@ -68,18 +66,18 @@ inline:
   'pc':
     'id': 'inl_pc'
     'type': 'text'
-    'status': 'deleted'
-    'value': ''
+    'status': 'new'
+    'value': 'Population PK'
   'dose-normalized':
     'id': 'inl_dose_normalized'
     'type': 'text'
-    'status': 'deleted'
-    'value': ''
+    'status': 'new'
+    'value': 'Yes'
   'renal function':
     'id': 'inl_renal_function'
     'type': 'text'
-    'status': 'deleted'
-    'value': ''
+    'status': 'new'
+    'value': 'Normal to mild impairment'
   ' name of source data file ':
     'id': 'inl_name_of_source_data_file'
     'type': 'text'
@@ -103,13 +101,13 @@ inline:
   'XX mg':
     'id': 'inl_xx_mg'
     'type': 'text'
-    'status': 'updated'
-    'value': '100 mg 100 mg'
+    'status': 'new'
+    'value': '100 mg'
   'Add any relevant observation across selected strata for table':
     'id': 'inl_add_any_relevant_observation_across_selected_strata_for_table'
     'type': 'text'
-    'status': 'updated'
-    'value': 'Exposure increased with dose and remained consistent across reviewed strata. Exposure increased with dose and remained consistent across reviewed strata.'
+    'status': 'new'
+    'value': 'Exposure increased with dose and remained consistent across reviewed strata.'
   'fast/slow':
     'id': 'inl_fast_slow'
     'type': 'text'
@@ -148,8 +146,8 @@ inline:
   'dose':
     'id': 'inl_dose'
     'type': 'text'
-    'status': 'updated'
-    'value': '100 mg once daily 100 mg once daily'
+    'status': 'new'
+    'value': '100 mg once daily'
 
 blocks:
   'model run summary':
@@ -181,17 +179,7 @@ blocks:
 
   'eta pairs':
     'type': 'image'
-    'title': 'ETA pairwise jkhjkhjkhjkhjkhjkhj  hjkhhkhkjhjkhkj hjhjkhjkh plot'
-    'footnote': 'Pairwise ETA relationship overview.'
-    'status': 'unchanged'
-    files:
-      - cont-vs-cont.png
-    'id': 'blk_eta_pairs'
-    
-    
-  'eta sadkjjsdjk':
-    'type': 'image'
-    'title': 'ETA pairwise jkhjkhjkhjkhjkhjkhj  hjkhhkhkjhjkhkj hjhjkhjkh plot'
+    'title': 'ETA pairwise relationship plot'
     'footnote': 'Pairwise ETA relationship overview.'
     'status': 'unchanged'
     files:
@@ -209,8 +197,9 @@ blocks:
 
   'gof cwres ':
     'type': 'image'
-    'title': 'GOF Title The same aswlerj sjfd seoijfuowe fjoerfjio ergjioej foiueoru erjiouroi joiruiohergio'
-    'footnote': 'this smw as above we can do that his amslq3r jlk wefjio jowe ewffioj'
+    'title': 'GOF CWRES  O sfdjkhjdfs plot'
+    'footnote': 'H sfj sf nlasd ,sdf sfkl lsdfkldfslk l '
     'status': 'updated'
-    files: []
+    files:
+      - dn-conc-time-linear.png
     'id': 'blk_gof_cwres'

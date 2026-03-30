@@ -1,0 +1,67 @@
+==========================================================================================
+YAML AUDIT SESSION: session_2026-03-30_11-11-10
+Started At: 2026-03-30 11:11:10 +0530
+YAML Path: /Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/mapping.yaml
+==========================================================================================
+
+[2026-03-30 11:11:11 +0530] [IMPORTANT] generate_mapping_yaml completed
+  - yaml_path=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/mapping.yaml
+[2026-03-30 11:13:31 +0530] [IMPORTANT] generate_magic_doc(from_template) completed
+  - output_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
+[2026-03-30 11:15:32 +0530] [IMPORTANT] sync_review_yaml(doc_to_yaml) completed
+  - context=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
+  - blocks_added=0
+  - blocks_deleted=0
+  - blocks_updated=6
+  - inline_added=0
+  - inline_deleted=0
+  - inline_updated=0
+[2026-03-30 11:15:32 +0530] [IMPORTANT] YAML field-level updates
+  - context=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
+  - blocks.model run summary.status: 'new' -> 'unchanged'
+  - blocks.model bootstrap plot.status: 'new' -> 'unchanged'
+  - blocks.categorical covariate summary .status: 'new' -> 'unchanged'
+  - blocks.eta pairs.title: 'ETA pairwise relationship plot' -> 'ETA pairwise jkhjkhjkhjkhjkhjkhj  hjkhhkhkjhjkhkj hjhjkhjkh plot'
+  - blocks.eta pairs.status: 'new' -> 'updated'
+  - blocks.studies.status: 'new' -> 'unchanged'
+  - blocks.gof cwres .status: 'new' -> 'unchanged'
+[2026-03-30 11:17:08 +0530] [IMPORTANT] sync_review_yaml(yaml_to_doc) completed
+  - review_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
+  - output_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx
+  - note=YAML not modified in yaml_to_doc mode
+[2026-03-30 11:18:14 +0530] [IMPORTANT] stage_reportifyr_assets completed
+  - tables_path=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output/temp_assets/tables
+  - figures_path=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output/temp_assets/figures
+[2026-03-30 11:18:20 +0530] [IMPORTANT] build_report_extended completed
+  - version=2
+  - docx_out=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output/report_v002.docx
+  - versions_root=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output
+[2026-03-30 11:20:29 +0530] [IMPORTANT] update_yaml_from_reviewed_doc completed
+  - context=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output/v002/report_v002.docx
+  - blocks_added=0
+  - blocks_deleted=0
+  - blocks_updated=2
+  - inline_added=0
+  - inline_deleted=0
+  - inline_updated=6
+[2026-03-30 11:20:29 +0530] [IMPORTANT] YAML field-level updates
+  - context=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output/v002/report_v002.docx
+  - inline.pc.status: 'new' -> 'deleted'
+  - inline.pc.value: 'Population PK' -> ''
+  - inline.dose-normalized.status: 'new' -> 'deleted'
+  - inline.dose-normalized.value: 'Yes' -> ''
+  - inline.renal function.status: 'new' -> 'deleted'
+  - inline.renal function.value: 'Normal to mild impairment' -> ''
+  - inline.XX mg.status: 'new' -> 'updated'
+  - inline.XX mg.value: '100 mg' -> '100 mg 100 mg'
+  - inline.Add any relevant observation across selected strata for table.status: 'new' -> 'updated'
+  - inline.Add any relevant observation across selected strata for table.value: 'Exposure increased with dose and remained consistent across reviewed strata.' -> 'Exposure increased with dose and remained consistent across reviewed strata. Exposure increased with dose and remained consistent across reviewed strata.'
+  - inline.dose.status: 'new' -> 'updated'
+  - inline.dose.value: '100 mg once daily' -> '100 mg once daily 100 mg once daily'
+  - blocks.eta pairs.status: 'updated' -> 'unchanged'
+  - blocks.gof cwres .footnote: 'hwefjiqrfjioirooerjojfre kjlfjlerfiljielrf' -> 'this smw as above we can do that his amslq3r jlk wefjio jowe ewffioj'
+  - blocks.gof cwres .status: 'unchanged' -> 'updated'
+  - blocks.gof cwres .files: 'dn-conc-time-linear.png' -> ''
+[2026-03-30 11:21:32 +0530] [IMPORTANT] generate_magic_doc(from_reviewed_output) completed
+  - reviewed_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/output/v002/report_v002.docx
+  - output_doc=/Users/sachinpatel/Documents/AZ/merge-poppk-repo-main-az/output/intermediate/PopPK_Report_merge_TFL_filled_draft-magic.docx

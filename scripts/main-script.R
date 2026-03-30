@@ -42,6 +42,19 @@ if (file.exists(config$paths$mapping_yaml)) {
   cleanup_duplicate_files_keys_in_yaml(config$paths$mapping_yaml)
 }
 
+generate_mapping_yaml_core <- generate_mapping_yaml
+generate_mapping_yaml <- function(config) {
+  start_yaml_audit_session(config, force_new = TRUE)
+  result <- generate_mapping_yaml_core(config)
+  append_audit_log(
+    config = config,
+    severity = "IMPORTANT",
+    event = "generate_mapping_yaml completed",
+    details = c(paste0("yaml_path=", config$paths$mapping_yaml))
+  )
+  result
+}
+
 generate_magic_doc <- function(
   config,
   mode = c("from_template", "from_reviewed_output"),
@@ -73,11 +86,20 @@ generate_magic_doc <- function(
       yml_path = ymlFilePath
     )
 
-    return(list(
+    out <- list(
       replacements = apply_result$replacements,
       remaining_non_inline_tags = apply_result$remaining_non_inline_tags,
       output = apply_result$output
-    ))
+    )
+
+    append_audit_log(
+      config = config,
+      severity = "IMPORTANT",
+      event = "generate_magic_doc(from_template) completed",
+      details = c(paste0("output_doc=", outputDocPath))
+    )
+
+    return(out)
   }
 
   if (is.null(reviewed_doc_path) || !nzchar(reviewed_doc_path)) {
@@ -94,13 +116,25 @@ generate_magic_doc <- function(
     )
   }
 
-  generate_magic_doc_from_reviewed_output(
+  out <- generate_magic_doc_from_reviewed_output(
     yaml_path = ymlFilePath,
     reviewed_doc_path = reviewed_doc_path,
     output_doc_path = output_doc_path,
     inline_tag_style = inline_tag_style,
     mark_missing = mark_missing_in_reviewed_output
   )
+
+  append_audit_log(
+    config = config,
+    severity = "IMPORTANT",
+    event = "generate_magic_doc(from_reviewed_output) completed",
+    details = c(
+      paste0("reviewed_doc=", reviewed_doc_path),
+      paste0("output_doc=", output_doc_path)
+    )
+  )
+
+  out
 }
 
 generate_magic_doc_from_output <- function(
@@ -143,20 +177,41 @@ sync_reviewed_doc_to_yaml <- function(reviewDocPath, config, add_new_blocks = TR
 
 sync_review_yaml <- function(config, mode = c("doc_to_yaml", "yaml_to_doc"), reviewDocPath, outputDocPath = NULL, add_new_blocks = TRUE) {
   mode <- match.arg(mode)
+  before_snapshot <- read_yaml_snapshot(config$paths$mapping_yaml)
 
   if (mode == "doc_to_yaml") {
-    return(sync_reviewed_doc_to_yaml(
+    result <- sync_reviewed_doc_to_yaml(
       reviewDocPath = reviewDocPath,
       config = config,
       add_new_blocks = add_new_blocks
-    ))
+    )
+    after_snapshot <- read_yaml_snapshot(config$paths$mapping_yaml)
+    emit_yaml_change_audit(
+      config = config,
+      event = "sync_review_yaml(doc_to_yaml) completed",
+      before = before_snapshot,
+      after = after_snapshot,
+      context = reviewDocPath
+    )
+    return(result)
   }
 
-  sync_yaml_to_review_doc(
+  result <- sync_yaml_to_review_doc(
     yaml_path = config$paths$mapping_yaml,
     review_doc_path = reviewDocPath,
     output_doc_path = outputDocPath
   )
+  append_audit_log(
+    config = config,
+    severity = "IMPORTANT",
+    event = "sync_review_yaml(yaml_to_doc) completed",
+    details = c(
+      paste0("review_doc=", reviewDocPath),
+      paste0("output_doc=", outputDocPath %||% reviewDocPath),
+      "note=YAML not modified in yaml_to_doc mode"
+    )
+  )
+  result
 }
 
 # User-facing backward basic step:
@@ -180,6 +235,8 @@ update_yaml_from_reviewed_doc <- function(config, latest_reviewed_doc, add_new_b
     stop(paste0("YAML file not found: ", config$paths$mapping_yaml), call. = FALSE)
   }
 
+  before_snapshot <- read_yaml_snapshot(config$paths$mapping_yaml)
+
   is_report_doc <- has_rpfy_block_markers(latest_reviewed_doc)
 
   block_result <- sync_yaml_with_review_doc(
@@ -201,12 +258,23 @@ update_yaml_from_reviewed_doc <- function(config, latest_reviewed_doc, add_new_b
     )
   }
 
-  list(
+  result <- list(
     yaml_path = config$paths$mapping_yaml,
     is_report_doc = is_report_doc,
     blocks = block_result,
     inline = inline_result
   )
+
+  after_snapshot <- read_yaml_snapshot(config$paths$mapping_yaml)
+  emit_yaml_change_audit(
+    config = config,
+    event = "update_yaml_from_reviewed_doc completed",
+    before = before_snapshot,
+    after = after_snapshot,
+    context = latest_reviewed_doc
+  )
+
+  result
 }
 
 stage_reportifyr_assets <- function(config) {
@@ -263,33 +331,88 @@ stage_reportifyr_assets <- function(config) {
   stage_one_type(config$paths$source_table_dirs, tables_out, "table")
   stage_one_type(config$paths$source_figure_dirs, figures_out, "figure")
 
-  list(
+  out <- list(
     tables_path = tables_out,
     figures_path = figures_out
   )
+
+  append_audit_log(
+    config = config,
+    severity = "IMPORTANT",
+    event = "stage_reportifyr_assets completed",
+    details = c(
+      paste0("tables_path=", out$tables_path),
+      paste0("figures_path=", out$figures_path)
+    )
+  )
+
+  out
+}
+
+build_report_extended_with_audit <- function(
+  config,
+  docx_in,
+  docx_out,
+  figures_path,
+  tables_path,
+  yaml_in,
+  config_yaml,
+  version,
+  versions_root
+) {
+  out <- azreportifyr::build_report_extended(
+    docx_in = docx_in,
+    docx_out = docx_out,
+    figures_path = figures_path,
+    tables_path = tables_path,
+    yaml_in = yaml_in,
+    config_yaml = config_yaml,
+    version = version,
+    versions_root = versions_root
+  )
+
+  append_audit_log(
+    config = config,
+    severity = "IMPORTANT",
+    event = "build_report_extended completed",
+    details = c(
+      paste0("version=", version),
+      paste0("docx_out=", docx_out),
+      paste0("versions_root=", versions_root)
+    )
+  )
+
+  out
 }
 
 # =============================================================================
 # 7. RUN
 # =============================================================================
-# --- FORWARD: template -> intermediate -> report ---
+# --- FORWARD: meta-template -> intermediate -> report ---
+# Start a fresh audit session folder + LOGS.txt for this run.
 generate_mapping_yaml(config)
 
+# Build intermediate "Specific" DOC from template tags + YAML values.
 magic_result <- generate_magic_doc(
   config = config,
   mode = "from_template"
 )
 
+# Re-sync YAML placeholders into the Specific DOC
+# (keeps missing markers/red color rules in sync for review).
 sync_review_yaml(
   config = config,
   mode = "yaml_to_doc",
   reviewDocPath = config$paths$magic_doc_out
 )
 
+# Stage all report assets (tables/figures) into single folders for reportifyr.
 dir.create(config$paths$report_out_dir, recursive = TRUE, showWarnings = FALSE)
 staged_assets <- stage_reportifyr_assets(config)
 
-forward_result <- azreportifyr::build_report_extended(
+# Generate versioned review report with actual inserted assets/content. (Compiled File)
+forward_result <- build_report_extended_with_audit(
+  config = config,
   docx_in = config$paths$magic_doc_out,
   docx_out = file.path(config$paths$report_out_dir, "report_v002.docx"),
   figures_path = staged_assets$figures_path,
@@ -303,20 +426,19 @@ forward_result <- azreportifyr::build_report_extended(
 # Backward basic step: update YAML from latest reviewed report.
 # Point this path to the reviewed file received back from user.
 latest_reviewed_doc <- file.path(config$paths$report_out_dir, "v002", "report_v002.docx")
+# Parse reviewed report (with hidden markers) and update YAML values/status.
 yaml_update_result <- update_yaml_from_reviewed_doc(
   config = config,
   latest_reviewed_doc = latest_reviewed_doc,
   add_new_blocks = FALSE
 )
 
-# Regenerate intermediate magic DOC from reviewed output + updated YAML
+# Regenerate intermediate specific DOC from reviewed output + updated YAML
+# This recreates tag-only intermediate for the next review iteration.
 magic_round2_result <- generate_magic_doc(
   config = config,
   mode = "from_reviewed_output",
   reviewed_doc_path = latest_reviewed_doc,
-  output_doc_path = file.path(
-    dirname(config$paths$magic_doc_out),
-    "PopPK_Report_merge_TFL_filled_draft-magic.docx"
-  ),
+  output_doc_path = config$paths$magic_doc_out,
   mark_missing_in_reviewed_output = TRUE
 )

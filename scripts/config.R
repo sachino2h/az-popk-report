@@ -20,10 +20,6 @@ get_config <- function() {
     mapping = list(
       default_block_status = "new",
       html_template = here::here("scripts", "templates", "mapping-editor-template.html")
-    ),
-    report = list(
-      image_max_width = 6,
-      image_max_height = 5
     )
   )
 }

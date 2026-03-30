@@ -63,8 +63,8 @@ inline:
   'Study and Dose':
     'id': 'inl_study_and_dose'
     'type': 'text'
-    'status': 'unchanged'
-    'value': 'Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD Study 106 - 100 mg QD'
+    'status': 'new'
+    'value': 'Study 106 - 100 mg QD'
   'pc':
     'id': 'inl_pc'
     'type': 'text'
@@ -98,18 +98,18 @@ inline:
   'n':
     'id': 'inl_n'
     'type': 'text'
-    'status': 'unchanged'
-    'value': '120 120 120 120'
+    'status': 'new'
+    'value': '120'
   'XX mg':
     'id': 'inl_xx_mg'
     'type': 'text'
-    'status': 'unchanged'
-    'value': '100 mg 100 mg 100 mg 100 mg'
+    'status': 'updated'
+    'value': '100 mg 100 mg'
   'Add any relevant observation across selected strata for table':
     'id': 'inl_add_any_relevant_observation_across_selected_strata_for_table'
     'type': 'text'
-    'status': 'unchanged'
-    'value': 'Exposure increased with dose and remained consistent across reviewed strata..'
+    'status': 'updated'
+    'value': 'Exposure increased with dose and remained consistent across reviewed strata. Exposure increased with dose and remained consistent across reviewed strata.'
   'fast/slow':
     'id': 'inl_fast_slow'
     'type': 'text'
@@ -148,14 +148,14 @@ inline:
   'dose':
     'id': 'inl_dose'
     'type': 'text'
-    'status': 'new'
-    'value': '100 mg once daily'
+    'status': 'updated'
+    'value': '100 mg once daily 100 mg once daily'
 
 blocks:
   'model run summary':
     'type': 'table'
-    'title': 'Sachin Patel'
-    'footnote': ''
+    'title': 'Model run summary table'
+    'footnote': 'Summary of key model run outputs.'
     'status': 'unchanged'
     files:
       - 106-pk-params.docx
@@ -164,7 +164,7 @@ blocks:
   'model bootstrap plot':
     'type': 'image'
     'title': 'Bootstrap diagnostic plot'
-    'footnote': ''
+    'footnote': 'Bootstrap plot for final model assessment.'
     'status': 'unchanged'
     files:
       - 106-bootstrap.png
@@ -172,8 +172,8 @@ blocks:
 
   'categorical covariate summary ':
     'type': 'table'
-    'title': ''
-    'footnote': ''
+    'title': 'Categorical covariate summary'
+    'footnote': 'Categorical covariate distribution by study.'
     'status': 'unchanged'
     files:
       - cat-cov-sum-study.docx
@@ -181,7 +181,17 @@ blocks:
 
   'eta pairs':
     'type': 'image'
-    'title': ''
+    'title': 'ETA pairwise jkhjkhjkhjkhjkhjkhj  hjkhhkhkjhjkhkj hjhjkhjkh plot'
+    'footnote': 'Pairwise ETA relationship overview.'
+    'status': 'unchanged'
+    files:
+      - cont-vs-cont.png
+    'id': 'blk_eta_pairs'
+    
+    
+  'eta sadkjjsdjk':
+    'type': 'image'
+    'title': 'ETA pairwise jkhjkhjkhjkhjkhjkhj  hjkhhkhkjhjkhkj hjhjkhjkh plot'
     'footnote': 'Pairwise ETA relationship overview.'
     'status': 'unchanged'
     files:
@@ -190,17 +200,17 @@ blocks:
 
   'studies':
     'type': 'table'
-    'title': ''
+    'title': 'Clinical studies listing'
     'footnote': 'List of studies included in analysis.'
     'status': 'unchanged'
-    files: []
+    files:
+      - pk-data-sum-dose-study.docx
     'id': 'blk_studies'
 
   'gof cwres ':
     'type': 'image'
-    'title': ''
-    'footnote': 'Spaghetti - Spaghetti -plots of individual PK profiles. Points are observations, lines connect observations from the same participant. Point shape indicate data above or below the quantification limit (XX ng/mL, dashed line)'
+    'title': 'GOF Title The same aswlerj sjfd seoijfuowe fjoerfjio ergjioej foiueoru erjiouroi joiruiohergio'
+    'footnote': 'this smw as above we can do that his amslq3r jlk wefjio jowe ewffioj'
     'status': 'updated'
-    files:
-      - dn-conc-time-linear.png
+    files: []
     'id': 'blk_gof_cwres'

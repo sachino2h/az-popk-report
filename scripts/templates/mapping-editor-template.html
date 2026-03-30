@@ -707,6 +707,12 @@
       line-height: 1;
     }
 
+    .yaml-dialog-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
     .yaml-dialog .preview {
       min-height: 0;
       max-height: none;
@@ -924,7 +930,9 @@
             <div>
               <div class="section-kicker">Asset Browser</div>
               <h2>Assets</h2>
+              <p id="asset-count-summary">0 remaining</p>
             </div>
+            <div class="summary-count" id="asset-total-fixed">Total: 0</div>
           </div>
 
           <div class="asset-tools">
@@ -932,9 +940,9 @@
               <input id="asset-search" type="search" placeholder="Search asset">
             </div>
             <div class="filter-row">
-              <button class="filter-pill active" data-filter="all" type="button">All</button>
-              <button class="filter-pill" data-filter="table" type="button">Tables</button>
-              <button class="filter-pill" data-filter="figure" type="button">Figures</button>
+              <button class="filter-pill active" data-filter="all" data-label="All" type="button">All</button>
+              <button class="filter-pill" data-filter="table" data-label="Tables" type="button">Tables</button>
+              <button class="filter-pill" data-filter="figure" data-label="Figures" type="button">Figures</button>
             </div>
           </div>
 
@@ -954,7 +962,10 @@
           <h2 id="yaml-dialog-title">YAML Preview</h2>
           <p>Updates live.</p>
         </div>
-        <button id="close-yaml-preview" class="btn yaml-dialog-close" type="button" aria-label="Close YAML preview">×</button>
+        <div class="yaml-dialog-actions">
+          <button id="copy-yaml-preview" class="btn" type="button">Copy YAML</button>
+          <button id="close-yaml-preview" class="btn yaml-dialog-close" type="button" aria-label="Close YAML preview">×</button>
+        </div>
       </div>
       <pre id="yaml-preview" class="preview"></pre>
     </div>
@@ -1024,22 +1035,29 @@
     }
 
     let state = normalizeMappingData(JSON.parse(JSON.stringify(INITIAL_DATA)));
+    const FIXED_TOTAL_ASSET_COUNT =
+      (Array.isArray(state.available_assets.tables) ? state.available_assets.tables.length : 0) +
+      (Array.isArray(state.available_assets.figures) ? state.available_assets.figures.length : 0);
 
     const els = {
       metaLine: document.getElementById("meta-line"),
       inlineCountLabel: document.getElementById("inline-count-label"),
       assetSearch: document.getElementById("asset-search"),
+      assetCountSummary: document.getElementById("asset-count-summary"),
+      assetTotalFixed: document.getElementById("asset-total-fixed"),
       assetCatalog: document.getElementById("asset-catalog"),
       inlineFields: document.getElementById("inline-fields"),
       blockList: document.getElementById("block-list"),
       openYamlPreview: document.getElementById("open-yaml-preview"),
       closeYamlPreview: document.getElementById("close-yaml-preview"),
+      copyYamlPreview: document.getElementById("copy-yaml-preview"),
       yamlModal: document.getElementById("yaml-modal"),
       yamlPreview: document.getElementById("yaml-preview"),
       downloadYaml: document.getElementById("download-yaml"),
       copyYaml: document.getElementById("copy-yaml"),
       resetYaml: document.getElementById("reset-yaml")
     };
+    els.filterPills = Array.from(document.querySelectorAll("[data-filter]"));
 
     function getCatalog() {
       return [
@@ -1052,9 +1070,19 @@
       const mapped = new Set();
       (state.blocks || []).forEach((block) => {
         const files = Array.isArray(block.files) ? block.files : [];
-        files.forEach((path) => mapped.add(path));
+        files.forEach((path) => {
+          const id = assetIdentity(path);
+          if (id) {
+            mapped.add(id);
+          }
+        });
       });
       return mapped;
+    }
+
+    function getRemainingCatalogItems() {
+      const mappedPaths = getMappedAssetPathSet();
+      return getCatalog().filter((asset) => !mappedPaths.has(assetIdentity(asset.path)));
     }
 
     function escapeHtml(value) {
@@ -1090,6 +1118,10 @@
       return String(value ?? "").split(/[\\/]/).pop() || "";
     }
 
+    function assetIdentity(value) {
+      return getFileName(value).trim().toLowerCase();
+    }
+
     function blockByName(name) {
       return state.blocks.find((block) => block.name === name);
     }
@@ -1117,19 +1149,21 @@
 
     function availableAssetsForBlock(block) {
       const files = Array.isArray(block.files) ? block.files : [];
+      const fileIds = new Set(files.map((path) => assetIdentity(path)).filter(Boolean));
       const mappedPaths = getMappedAssetPathSet();
       const expectedAssetKind = assetKindForBlockType(block.type);
 
       return getCatalog().filter((asset) => {
+        const assetId = assetIdentity(asset.path);
         if (expectedAssetKind && asset.kind !== expectedAssetKind) {
           return false;
         }
 
-        if (mappedPaths.has(asset.path) && !files.includes(asset.path)) {
+        if (mappedPaths.has(assetId) && !fileIds.has(assetId)) {
           return false;
         }
 
-        return !files.includes(asset.path);
+        return !fileIds.has(assetId);
       });
     }
 
@@ -1138,13 +1172,32 @@
       els.inlineCountLabel.textContent = `${Object.keys(state.inline).length} items`;
     }
 
+    function renderAssetCounts() {
+      if (els.assetTotalFixed) {
+        els.assetTotalFixed.textContent = `Total: ${FIXED_TOTAL_ASSET_COUNT}`;
+      }
+
+      const remaining = getRemainingCatalogItems();
+      const tableCount = remaining.filter((asset) => asset.kind === "table").length;
+      const figureCount = remaining.filter((asset) => asset.kind === "figure").length;
+      const allCount = remaining.length;
+
+      if (els.assetCountSummary) {
+        els.assetCountSummary.textContent = `${allCount} remaining • ${tableCount} tables • ${figureCount} figures`;
+      }
+
+      els.filterPills.forEach((button) => {
+        const filter = button.dataset.filter;
+        const label = button.dataset.label || button.textContent.trim();
+        const count = filter === "all" ? allCount : (filter === "table" ? tableCount : figureCount);
+        button.textContent = `${label} (${count})`;
+      });
+    }
+
     function renderAssetCatalog() {
+      renderAssetCounts();
       const query = els.assetSearch.value.trim().toLowerCase();
-      const mappedPaths = getMappedAssetPathSet();
-      const items = getCatalog().filter((asset) => {
-        if (mappedPaths.has(asset.path)) {
-          return false;
-        }
+      const items = getRemainingCatalogItems().filter((asset) => {
 
         if (assetFilter !== "all" && asset.kind !== assetFilter) {
           return false;
@@ -1363,6 +1416,7 @@
             target.files = target.files.filter((path) => path !== filePath);
             target.open = true;
             renderBlocks();
+            renderAssetCatalog();
             renderYamlPreview();
           });
         });
@@ -1409,12 +1463,17 @@
         return;
       }
 
+      const assetId = assetIdentity(assetPath);
+      if (!assetId) {
+        return;
+      }
+
       const alreadyMappedElsewhere = (state.blocks || []).some((candidate) => {
         if (!candidate || candidate.name === blockName) {
           return false;
         }
         const files = Array.isArray(candidate.files) ? candidate.files : [];
-        return files.includes(assetPath);
+        return files.some((path) => assetIdentity(path) === assetId);
       });
       if (alreadyMappedElsewhere) {
         return;
@@ -1424,12 +1483,13 @@
         block.files = [];
       }
 
-      if (!block.files.includes(assetPath)) {
+      if (!block.files.some((path) => assetIdentity(path) === assetId)) {
         block.files.push(assetPath);
       }
 
       block.open = true;
       renderBlocks();
+      renderAssetCatalog();
       renderYamlPreview();
     }
 
@@ -1554,17 +1614,19 @@
 
     function renderAll() {
       renderSummary();
+      renderAssetCounts();
       renderAssetCatalog();
       renderInlineFields();
       renderBlocks();
       renderYamlPreview();
     }
 
-    document.querySelectorAll("[data-filter]").forEach((button) => {
+    els.filterPills.forEach((button) => {
       button.addEventListener("click", () => {
         assetFilter = button.dataset.filter;
-        document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
+        els.filterPills.forEach((item) => item.classList.remove("active"));
         button.classList.add("active");
+        renderAssetCounts();
         renderAssetCatalog();
       });
     });
@@ -1593,6 +1655,18 @@
 
       window.setTimeout(() => {
         els.copyYaml.textContent = "Copy YAML";
+      }, 1200);
+    });
+    els.copyYamlPreview.addEventListener("click", async () => {
+      try {
+        await copyYaml();
+        els.copyYamlPreview.textContent = "Copied";
+      } catch (error) {
+        els.copyYamlPreview.textContent = "Copy failed";
+      }
+
+      window.setTimeout(() => {
+        els.copyYamlPreview.textContent = "Copy YAML";
       }, 1200);
     });
     els.resetYaml.addEventListener("click", resetState);

@@ -358,7 +358,9 @@ build_report_extended_with_audit <- function(
   yaml_in,
   config_yaml,
   version,
-  versions_root
+  versions_root,
+  style_file,
+  docx_table_style
 ) {
   out <- azreportifyr::build_report_extended(
     docx_in = docx_in,
@@ -368,7 +370,9 @@ build_report_extended_with_audit <- function(
     yaml_in = yaml_in,
     config_yaml = config_yaml,
     version = version,
-    versions_root = versions_root
+    versions_root = versions_root,
+    block_paragraph_styles = style_file,
+    docx_table_style = docx_table_style
   )
 
   append_audit_log(
@@ -402,13 +406,15 @@ specific_template_result <- generate_magic_doc(
 # (keeps missing markers/red color rules in sync for review).
 sync_review_yaml(
   config = config,
-  mode = "doc_to_yaml",
+  mode = "yaml_to_doc",
   reviewDocPath = config$paths$magic_doc_out
 )
 
 # Stage all report assets (tables/figures) into single folders for reportifyr.
 dir.create(config$paths$report_out_dir, recursive = TRUE, showWarnings = FALSE)
 staged_report_assets <- stage_reportifyr_assets(config)
+
+config$block_paragraph_styles
 
 # Generate the versioned Compiled file with actual inserted assets/content.
 compiled_file_result <- build_report_extended_with_audit(
@@ -420,7 +426,9 @@ compiled_file_result <- build_report_extended_with_audit(
   yaml_in = config$paths$mapping_yaml,
   config_yaml = here::here("report", "config.yml"),
   version = 2,
-  versions_root = config$paths$report_out_dir
+  versions_root = config$paths$report_out_dir,
+  style_file = config$block_paragraph_styles,
+  docx_table_style = config$docx_table_style
 )
 
 # Backward step: update YAML from latest reviewed Compiled file.

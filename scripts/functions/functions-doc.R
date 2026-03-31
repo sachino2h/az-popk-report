@@ -596,6 +596,162 @@ replace_split_placeholders <- function(doc, replacements_df) {
   doc
 }
 
+apply_paragraph_style_to_magic_blocks <- function(
+  doc,
+  replacements_df,
+  style_name = "Paragraph",
+  missing_style_name = "Paragraph + Red"
+) {
+  if (nrow(replacements_df) == 0) {
+    return(doc)
+  }
+
+  replacement_values <- unique(replacements_df$replacement)
+  replacement_values <- replacement_values[nzchar(replacement_values)]
+  if (length(replacement_values) == 0) {
+    return(doc)
+  }
+
+  resolve_paragraph_style_id <- function(doc_obj, style_label) {
+    style_label <- normalize_doc_scalar(style_label)
+    if (!nzchar(style_label)) {
+      return("")
+    }
+
+    pkg_dir <- tryCatch(doc_obj$package_dir, error = function(e) NULL)
+    styles_path <- if (!is.null(pkg_dir) && nzchar(pkg_dir)) {
+      file.path(pkg_dir, "word", "styles.xml")
+    } else {
+      ""
+    }
+    if (!nzchar(styles_path) || !file.exists(styles_path)) {
+      return(style_label)
+    }
+
+    styles_xml <- tryCatch(xml2::read_xml(styles_path), error = function(e) NULL)
+    if (is.null(styles_xml)) {
+      return(style_label)
+    }
+    sns <- xml2::xml_ns(styles_xml)
+    style_nodes <- xml2::xml_find_all(styles_xml, ".//w:style[@w:type='paragraph']", sns)
+    if (length(style_nodes) == 0) {
+      return(style_label)
+    }
+
+    normalized_target <- tolower(gsub("\\s+", " ", trimws(style_label)))
+    style_map <- lapply(style_nodes, function(node) {
+      sid <- normalize_doc_scalar(xml2::xml_attr(node, "styleId"))
+      if (!nzchar(sid)) {
+        sid <- normalize_doc_scalar(xml2::xml_attr(node, "w:styleId"))
+      }
+      name_node <- xml2::xml_find_first(node, "./w:name", sns)
+      nm <- ""
+      if (!inherits(name_node, "xml_missing")) {
+        nm <- normalize_doc_scalar(xml2::xml_attr(name_node, "val"))
+        if (!nzchar(nm)) {
+          nm <- normalize_doc_scalar(xml2::xml_attr(name_node, "w:val"))
+        }
+      }
+      list(style_id = sid, style_name = nm)
+    })
+
+    # 1) exact by style name
+    for (item in style_map) {
+      if (!nzchar(item$style_id)) next
+      if (identical(tolower(gsub("\\s+", " ", trimws(item$style_name))), normalized_target)) {
+        return(item$style_id)
+      }
+    }
+
+    # 2) exact by style id
+    for (item in style_map) {
+      if (!nzchar(item$style_id)) next
+      if (identical(tolower(gsub("\\s+", " ", trimws(item$style_id))), normalized_target)) {
+        return(item$style_id)
+      }
+    }
+
+    # 3) loose match without punctuation (Paragraph + Red vs ParagraphRed)
+    normalize_loose <- function(x) gsub("[^a-z0-9]+", "", tolower(normalize_doc_scalar(x)))
+    loose_target <- normalize_loose(style_label)
+    for (item in style_map) {
+      if (!nzchar(item$style_id)) next
+      if (identical(normalize_loose(item$style_name), loose_target) ||
+          identical(normalize_loose(item$style_id), loose_target)) {
+        return(item$style_id)
+      }
+    }
+
+    style_label
+  }
+
+  default_style_id <- resolve_paragraph_style_id(doc, style_name)
+  missing_style_id <- resolve_paragraph_style_id(doc, missing_style_name)
+  if (!nzchar(default_style_id)) default_style_id <- style_name
+  if (!nzchar(missing_style_id)) missing_style_id <- missing_style_name
+
+  replacement_style <- setNames(rep(default_style_id, length(replacement_values)), replacement_values)
+  if ("has_missing" %in% names(replacements_df)) {
+    has_missing_vec <- !is.na(replacements_df$has_missing) & as.logical(replacements_df$has_missing)
+    missing_rows <- replacements_df[has_missing_vec, , drop = FALSE]
+    if (nrow(missing_rows) > 0) {
+      missing_values <- unique(missing_rows$replacement)
+      missing_values <- missing_values[nzchar(missing_values)]
+      for (rv in missing_values) {
+        replacement_style[[rv]] <- missing_style_id
+      }
+    }
+  }
+
+  body_xml <- docx_body_xml(doc)
+  ns <- xml2::xml_ns(body_xml)
+  paragraphs <- xml2::xml_find_all(body_xml, ".//w:p", ns)
+  if (length(paragraphs) == 0) {
+    return(doc)
+  }
+
+  for (paragraph in paragraphs) {
+    text_nodes <- xml2::xml_find_all(paragraph, ".//w:t", ns)
+    if (length(text_nodes) == 0) {
+      next
+    }
+
+    full_text <- paste(xml2::xml_text(text_nodes), collapse = "")
+    if (!nzchar(full_text)) {
+      next
+    }
+
+    matched_values <- replacement_values[vapply(replacement_values, function(rv) grepl(rv, full_text, fixed = TRUE), logical(1))]
+    if (length(matched_values) == 0) {
+      next
+    }
+    target_style <- replacement_style[[matched_values[[1]]]] %||% style_name
+
+    ppr_node <- xml2::xml_find_first(paragraph, "./w:pPr", ns)
+    if (inherits(ppr_node, "xml_missing")) {
+      ppr_node <- xml2::xml_add_child(
+        paragraph,
+        xml2::read_xml(sprintf('<w:pPr xmlns:w="%s"/>', WORD_NS)),
+        .where = 0
+      )
+    }
+
+    pstyle_node <- xml2::xml_find_first(ppr_node, "./w:pStyle", ns)
+    if (inherits(pstyle_node, "xml_missing")) {
+      xml2::xml_add_child(
+        ppr_node,
+        xml2::read_xml(
+          sprintf('<w:pStyle xmlns:w="%s" w:val="%s"/>', WORD_NS, target_style)
+        )
+      )
+    } else {
+      xml2::xml_set_attr(pstyle_node, "w:val", target_style)
+    }
+  }
+
+  doc
+}
+
 color_missing_runs_red <- function(doc) {
   body_xml <- docx_body_xml(doc)
   ns <- xml2::xml_ns(body_xml)
@@ -3001,6 +3157,7 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
     return(list(doc = doc, updates = 0L, replacements = data.frame(
       block_id = character(0),
       replacement = character(0),
+      has_missing = logical(0),
       stringsAsFactors = FALSE
     )))
   }
@@ -3040,6 +3197,7 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
     return(list(doc = doc, updates = 0L, replacements = data.frame(
       block_id = character(0),
       replacement = character(0),
+      has_missing = logical(0),
       stringsAsFactors = FALSE
     )))
   }
@@ -3063,6 +3221,7 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
     return(list(doc = doc, updates = 0L, replacements = data.frame(
       block_id = character(0),
       replacement = character(0),
+      has_missing = logical(0),
       stringsAsFactors = FALSE
     )))
   }
@@ -3176,6 +3335,7 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
       replacement_rows[[length(replacement_rows) + 1]] <- data.frame(
         block_id = block_id,
         replacement = placeholder,
+        has_missing = grepl("MISSING(?:_VALUE)?\\(", placeholder, perl = TRUE),
         stringsAsFactors = FALSE
       )
     }
@@ -3242,7 +3402,7 @@ convert_report_blocks_to_magic_placeholders <- function(doc, yml_data, skip_dele
   }
 
   replacements_df <- if (length(replacement_rows) > 0) dplyr::bind_rows(replacement_rows) else
-    data.frame(block_id = character(0), replacement = character(0), stringsAsFactors = FALSE)
+    data.frame(block_id = character(0), replacement = character(0), has_missing = logical(0), stringsAsFactors = FALSE)
 
   list(doc = doc, updates = updates, replacements = replacements_df)
 }
@@ -3426,6 +3586,12 @@ generate_magic_doc_from_reviewed_output <- function(yaml_path, reviewed_doc_path
     mark_missing = mark_missing
   )
   doc <- block_result$doc
+  doc <- apply_paragraph_style_to_magic_blocks(
+    doc = doc,
+    replacements_df = block_result$replacements,
+    style_name = "Paragraph",
+    missing_style_name = "Paragraph + Red"
+  )
 
   inline_result <- convert_report_inline_values_to_tags(
     doc = doc,
@@ -3489,6 +3655,11 @@ apply_magic_doc_replacements <- function(input_doc_path, output_doc_path, tags, 
   }
 
   doc <- replace_split_placeholders(doc, replacements)
+  doc <- apply_paragraph_style_to_magic_blocks(
+    doc = doc,
+    replacements_df = replacements,
+    style_name = "Paragraph"
+  )
   doc <- add_hidden_ids_to_doc(doc, replacements)
   doc <- add_hidden_inline_ids_to_doc(doc, yml_data)
   doc <- color_missing_runs_red(doc)

@@ -85,6 +85,10 @@ read_template_placeholders <- function(template_path) {
         normalized_type <- if (prefix == "figure") "image" else prefix
         return(list(target = "block", name = label, type = normalized_type))
       }
+
+      if (!is.na(prefix) && !is.na(label) && prefix == "block" && nzchar(label)) {
+        return(list(target = "block", name = label, type = "block"))
+      }
     }
 
     list(target = "block", name = normalize_mapping_key(raw_value), type = "")
@@ -215,6 +219,7 @@ new_block_mapping <- function(block_specs, default_status) {
 
     blocks[[block_name]] <- list(
       type = block_spec$type %||% "",
+      value = "",
       title = "",
       footnote = "",
       status = default_status,
@@ -343,8 +348,12 @@ render_yaml_text <- function(mapping) {
 
       lines <- c(lines, paste0("  ", yaml_text(block_name), ":"))
       lines <- c(lines, yaml_field_lines("type", block$type, indent = 4))
-      lines <- c(lines, yaml_field_lines("title", block$title, indent = 4))
-      lines <- c(lines, yaml_field_lines("footnote", block$footnote, indent = 4))
+      if (identical(tolower(block$type %||% ""), "block")) {
+        lines <- c(lines, yaml_field_lines("value", block$value %||% "", indent = 4))
+      } else {
+        lines <- c(lines, yaml_field_lines("title", block$title, indent = 4))
+        lines <- c(lines, yaml_field_lines("footnote", block$footnote, indent = 4))
+      }
       lines <- c(lines, yaml_field_lines("status", block$status, indent = 4))
 
       if (length(block$files) == 0) {
@@ -382,6 +391,7 @@ build_html_data <- function(mapping) {
     block_data[[length(block_data) + 1]] <- list(
       name = block_name,
       type = block$type,
+      value = block$value %||% "",
       title = block$title,
       footnote = block$footnote,
       status = block$status,

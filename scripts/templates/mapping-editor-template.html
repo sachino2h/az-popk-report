@@ -1092,11 +1092,12 @@
       return {
         name: safe.name || "",
         type: normalizedType,
+        value: safe.value || "",
         title: safe.title || "",
         footnote: safe.footnote || "",
         status: safe.status || "new",
         files: Array.isArray(safe.files) ? safe.files.filter((item) => item != null).map(String) : [],
-        open: Boolean(safe.title || safe.footnote || (Array.isArray(safe.files) && safe.files.length))
+        open: Boolean(safe.value || safe.title || safe.footnote || (Array.isArray(safe.files) && safe.files.length))
       };
     }
 
@@ -1339,6 +1340,7 @@
         const files = Array.isArray(block.files) ? block.files : [];
         const available = availableAssetsForBlock(block);
         const mappedCount = files.length ? `${files.length} file${files.length > 1 ? "s" : ""}` : "empty";
+        const isParagraphBlock = block.type === "block";
 
         const mappedFiles = files.length
           ? files.map((filePath, fileIndex) => `
@@ -1371,6 +1373,7 @@
                     <option value="" ${block.type === "" ? "selected" : ""}>Not set</option>
                     <option value="image" ${block.type === "image" ? "selected" : ""}>Image</option>
                     <option value="table" ${block.type === "table" ? "selected" : ""}>Table</option>
+                    <option value="block" ${block.type === "block" ? "selected" : ""}>Block</option>
                   </select>
                 </div>
 
@@ -1393,15 +1396,24 @@
                 </div>
               </div>
 
-              <div class="field">
-                <label>Title</label>
-                <textarea data-block-field="title">${escapeHtml(block.title)}</textarea>
-              </div>
+              ${isParagraphBlock ? `
+                <div class="field">
+                  <label>Value</label>
+                  <textarea data-block-field="value">${escapeHtml(block.value || "")}</textarea>
+                </div>
+              ` : ""}
 
-              <div class="field">
-                <label>Footnote</label>
-                <textarea data-block-field="footnote">${escapeHtml(block.footnote)}</textarea>
-              </div>
+              ${!isParagraphBlock ? `
+                <div class="field">
+                  <label>Title</label>
+                  <textarea data-block-field="title">${escapeHtml(block.title)}</textarea>
+                </div>
+
+                <div class="field">
+                  <label>Footnote</label>
+                  <textarea data-block-field="footnote">${escapeHtml(block.footnote)}</textarea>
+                </div>
+              ` : ""}
 
               <div class="dropzone" data-dropzone="${escapeHtml(block.name)}">
                 <div class="dropzone-label">Drop asset here or use Add file above.</div>
@@ -1617,8 +1629,12 @@
           const files = Array.isArray(block.files) ? block.files : [];
           lines.push(`  ${yamlQuote(block.name)}:`);
           lines.push(...yamlFieldLines("type", block.type, 4));
-          lines.push(...yamlFieldLines("title", block.title, 4));
-          lines.push(...yamlFieldLines("footnote", block.footnote, 4));
+          if ((block.type || "").toLowerCase() === "block") {
+            lines.push(...yamlFieldLines("value", block.value || "", 4));
+          } else {
+            lines.push(...yamlFieldLines("title", block.title, 4));
+            lines.push(...yamlFieldLines("footnote", block.footnote, 4));
+          }
           lines.push(...yamlFieldLines("status", block.status, 4));
 
           if (!files.length) {

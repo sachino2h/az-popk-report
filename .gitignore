@@ -3,3 +3,26 @@
 .RData
 .Ruserdata
 bin/*
+
+# OS / editor noise
+.DS_Store
+**/.DS_Store
+
+# Office lock/temp files
+~$*.docx
+
+# Local generated temp artifacts
+output/output/temp_assets/
+styles_output.csv
+
+# Per-run local logs (session folders)
+output/logs/session_*/
+
+# Local helper bundles (do not track)
+H_Test/
+H_Test.zip
+
+# Keep only intermediate DOCX artifacts tracked under output
+output/*
+!output/intermediate/
+!output/intermediate/**

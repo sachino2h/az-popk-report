@@ -1212,6 +1212,33 @@ extract_rpfy_markers_from_hidden_runs <- function(hidden_texts) {
   dplyr::bind_rows(out)
 }
 
+extract_run_text_preserve_controls <- function(run_node, ns, tab_token = "\\t") {
+  if (inherits(run_node, "xml_missing")) {
+    return("")
+  }
+
+  nodes <- xml2::xml_find_all(run_node, "./w:t|./w:tab|./w:br|./w:cr", ns)
+  if (length(nodes) == 0) {
+    return("")
+  }
+
+  pieces <- vapply(nodes, function(node) {
+    node_name <- sub("^.*:", "", xml2::xml_name(node))
+    if (identical(node_name, "t")) {
+      return(xml2::xml_text(node))
+    }
+    if (identical(node_name, "tab")) {
+      return(tab_token)
+    }
+    if (identical(node_name, "br") || identical(node_name, "cr")) {
+      return("\n")
+    }
+    ""
+  }, character(1))
+
+  paste(pieces, collapse = "")
+}
+
 extract_review_blocks_from_report_doc <- function(doc_path) {
   doc <- officer::read_docx(doc_path)
   body_xml <- officer::docx_body_xml(doc)
@@ -1254,9 +1281,8 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     active_footnote_ids <- character(0)
 
     for (run in run_nodes) {
-      text_nodes <- xml2::xml_find_all(run, ".//w:t", ns)
-      if (length(text_nodes) == 0) next
-      run_text <- paste(xml2::xml_text(text_nodes), collapse = "")
+      run_text <- extract_run_text_preserve_controls(run, ns, tab_token = "\\t")
+      if (!nzchar(run_text)) next
 
       vanish_node <- xml2::xml_find_first(run, "./w:rPr/w:vanish", ns)
       is_hidden <- !inherits(vanish_node, "xml_missing")
@@ -2525,9 +2551,7 @@ extract_inline_values_from_review_report_doc <- function(review_doc_path) {
     active_ids <- character(0)
 
     for (run in runs) {
-      text_nodes <- xml2::xml_find_all(run, ".//w:t", ns)
-      if (length(text_nodes) == 0) next
-      run_text <- paste(xml2::xml_text(text_nodes), collapse = "")
+      run_text <- extract_run_text_preserve_controls(run, ns, tab_token = "\\t")
       if (!nzchar(run_text)) next
 
       vanish_node <- xml2::xml_find_first(run, "./w:rPr/w:vanish", ns)

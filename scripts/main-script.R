@@ -359,9 +359,50 @@ build_report_extended_with_audit <- function(
   config_yaml,
   version,
   versions_root,
-  style_file,
-  docx_table_style
+  style_file = NULL,
+  docx_table_style = NULL
 ) {
+  
+  # --- 1. Create asset manifest tracking ORIGINAL sources ---
+  version_str <- sprintf("v%03d", as.integer(version))
+  
+  manifest <- create_asset_manifest(
+    yaml_path = yaml_in,
+    source_figure_dirs = config$paths$source_figure_dirs,
+    source_table_dirs = config$paths$source_table_dirs,
+    report_version = version_str,
+    docx_out = docx_out
+  )
+  
+  # Log asset info to audit log
+  if (manifest$asset_count > 0) {
+    asset_details <- vapply(manifest$assets, function(a) {
+      if (isTRUE(a$file_exists)) {
+        sprintf("%s: %s (mtime: %s)", 
+                a$variable_name, 
+                a$file_name, 
+                a$file_mtime)
+      } else {
+        sprintf("%s: %s (NOT FOUND in sources)", 
+                a$variable_name, 
+                a$file_name)
+      }
+    }, character(1))
+    
+    append_audit_log(
+      config = config,
+      severity = "INFO",
+      event = "Asset manifest created (tracking original sources)",
+      details = c(
+        paste0("asset_count=", manifest$asset_count),
+        paste0("source_figure_dirs=", paste(config$paths$source_figure_dirs, collapse = ", ")),
+        paste0("source_table_dirs=", paste(config$paths$source_table_dirs, collapse = ", ")),
+        asset_details
+      )
+    )
+  }
+  
+  # --- 2. Call actual build ---
   out <- azreportifyr::build_report_extended(
     docx_in = docx_in,
     docx_out = docx_out,
@@ -371,10 +412,13 @@ build_report_extended_with_audit <- function(
     config_yaml = config_yaml,
     version = version,
     versions_root = versions_root,
-    block_paragraph_styles = style_file,
     docx_table_style = docx_table_style
   )
-
+  
+  # --- 3. Save manifest next to report ---
+  manifest_path <- save_asset_manifest(manifest, docx_out)
+  
+  # --- 4. Log completion ---
   append_audit_log(
     config = config,
     severity = "IMPORTANT",
@@ -382,11 +426,18 @@ build_report_extended_with_audit <- function(
     details = c(
       paste0("version=", version),
       paste0("docx_out=", docx_out),
-      paste0("versions_root=", versions_root)
+      paste0("versions_root=", versions_root),
+      paste0("assets_tracked=", manifest$asset_count),
+      paste0("manifest_path=", manifest_path)
     )
   )
-
-  out
+  
+  # Return both the build output and manifest path
+  list(
+    build_result = out,
+    manifest_path = manifest_path,
+    manifest = manifest
+  )
 }
 
 # =============================================================================
@@ -415,7 +466,7 @@ sync_review_yaml(
 dir.create(config$paths$report_out_dir, recursive = TRUE, showWarnings = FALSE)
 staged_report_assets <- stage_reportifyr_assets(config)
 
-config$block_paragraph_styles
+# config$block_paragraph_styles
 
 # Generate the versioned Compiled file with actual inserted assets/content.
 compiled_file_result <- build_report_extended_with_audit(
@@ -451,3 +502,5 @@ specific_template_round2_result <- generate_magic_doc(
   output_doc_path = config$paths$magic_doc_out,
   mark_missing_in_reviewed_output = TRUE
 )
+
+check_report_freshness(compiled_file_result$manifest_path)

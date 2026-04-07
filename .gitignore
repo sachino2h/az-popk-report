@@ -26,3 +26,4 @@ H_Test.zip
 output/*
 !output/intermediate/
 !output/intermediate/**
+/output/*

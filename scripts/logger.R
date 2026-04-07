@@ -671,3 +671,451 @@ emit_yaml_change_audit <- function(config, event, before, after, context = "") {
     )
   }
 }
+# ======================== my code below =======================
+# =============================================================================
+# ASSET MANIFEST TRACKING
+# Track file modification times when assets are inserted into reports.
+# Enables detection of stale reports (source files updated after build).
+#
+# IMPORTANT: We track ORIGINAL source files (from config$paths$source_figure_dirs
+# and config$paths$source_table_dirs), NOT the staged copies in temp_assets/
+# =============================================================================
+
+#' Create Asset Manifest
+#' 
+#' Reads YAML mapping file, extracts all file references from blocks,
+#' finds them in ORIGINAL source directories, and records their modification times.
+#'
+#' @param yaml_path Path to mapping.yaml
+#' @param source_figure_dirs Vector of original figure source directories
+#' @param source_table_dirs Vector of original table source directories
+#' @param report_version Version string (e.g., "v002")
+#' @param docx_out Path to the output docx file
+#'
+#' @return List containing manifest data
+create_asset_manifest <- function(yaml_path, 
+                                   source_figure_dirs, 
+                                   source_table_dirs, 
+                                   report_version, 
+                                   docx_out) {
+  
+ build_time <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
+  
+  # Read YAML
+  yaml_data <- tryCatch(
+    yaml::read_yaml(yaml_path),
+    error = function(e) {
+      warning("Could not read YAML for manifest: ", e$message)
+      return(NULL)
+    }
+  )
+  
+  if (is.null(yaml_data) || is.null(yaml_data$blocks)) {
+    return(list(
+      report_version = report_version,
+      build_time = build_time,
+      docx_out = docx_out,
+      source_figure_dirs = source_figure_dirs,
+      source_table_dirs = source_table_dirs,
+      assets = list(),
+      asset_count = 0L
+    ))
+  }
+  
+  assets <- list()
+  
+  # Iterate through all blocks
+  for (var_name in names(yaml_data$blocks)) {
+    block <- yaml_data$blocks[[var_name]]
+    files_list <- block$files
+    
+    # Skip if no files
+    if (is.null(files_list) || length(files_list) == 0) next
+    
+    # Handle each file in the files array
+    for (file_name in files_list) {
+      if (is.null(file_name) || !nzchar(trimws(file_name))) next
+      
+      file_name <- trimws(file_name)
+      
+      # Find file in ORIGINAL source directories (not staged)
+      file_info <- .find_original_asset_file(
+        file_name, 
+        source_figure_dirs, 
+        source_table_dirs
+      )
+      
+      asset_entry <- list(
+        variable_name = var_name,
+        variable_id = block$id %||% "",
+        variable_type = block$type %||% "",
+        file_name = file_name,
+        original_path = file_info$path,
+        source_dir = file_info$source_dir,
+        file_exists = file_info$exists,
+        file_mtime = file_info$mtime,
+        inserted_at = build_time
+      )
+      
+      assets <- append(assets, list(asset_entry))
+    }
+  }
+  
+  manifest <- list(
+    report_version = report_version,
+    build_time = build_time,
+    docx_out = normalizePath(docx_out, mustWork = FALSE),
+    source_figure_dirs = source_figure_dirs,
+    source_table_dirs = source_table_dirs,
+    assets = assets,
+    asset_count = length(assets)
+  )
+  
+  manifest
+}
+
+
+#' Find Asset File in Original Source Directories
+#' 
+#' Searches through all source directories (figures and tables) to find the file.
+#' Returns the ORIGINAL path, not staged copy.
+#'
+#' @param file_name Name of the file to find
+#' @param source_figure_dirs Vector of figure source directories
+#' @param source_table_dirs Vector of table source directories
+#'
+#' @return List with path, source_dir, exists, mtime
+.find_original_asset_file <- function(file_name, source_figure_dirs, source_table_dirs) {
+  
+  # Combine all source directories
+  all_source_dirs <- c(source_figure_dirs, source_table_dirs)
+  all_source_dirs <- all_source_dirs[dir.exists(all_source_dirs)]
+  
+  # Search in each source directory (including subdirectories)
+  for (src_dir in all_source_dirs) {
+    # List all files recursively
+    all_files <- list.files(
+      path = src_dir,
+      pattern = paste0("^", gsub("([.\\\\|()[{^$*+?])", "\\\\\\1", file_name), "$"),
+      full.names = TRUE,
+      recursive = TRUE
+    )
+    
+    if (length(all_files) > 0) {
+      # Found the file
+      found_path <- all_files[1]
+      return(list(
+        path = normalizePath(found_path),
+        source_dir = normalizePath(src_dir),
+        exists = TRUE,
+        mtime = format(file.mtime(found_path), "%Y-%m-%dT%H:%M:%S%z")
+      ))
+    }
+  }
+  
+  # File not found in any source directory
+  list(
+    path = NA_character_,
+    source_dir = NA_character_,
+    exists = FALSE,
+    mtime = NA_character_
+  )
+}
+
+
+#' Save Asset Manifest to JSON
+#' 
+#' Saves manifest next to the report file.
+#'
+#' @param manifest Manifest list from create_asset_manifest()
+#' @param docx_out Path to report docx (manifest saved alongside)
+#'
+#' @return Path to saved manifest file
+save_asset_manifest <- function(manifest, docx_out) {
+  
+  # Generate manifest path: report_v002.docx -> report_v002_manifest.json
+  docx_dir <- dirname(docx_out)
+  docx_base <- tools::file_path_sans_ext(basename(docx_out))
+  manifest_path <- file.path(docx_dir, paste0(docx_base, "_manifest.json"))
+  
+  tryCatch({
+    jsonlite::write_json(
+      manifest, 
+      manifest_path, 
+      pretty = TRUE, 
+      auto_unbox = TRUE
+    )
+    message("Logger: asset manifest saved — ", manifest_path)
+    message("Logger: ", manifest$asset_count, " asset(s) tracked from original sources")
+  }, error = function(e) {
+    warning("Could not save asset manifest: ", e$message)
+  })
+  
+  invisible(manifest_path)
+}
+
+
+#' Check Report Freshness
+#' 
+#' Compares current file modification times of ORIGINAL source files
+#' against recorded times in manifest.
+#' Identifies stale files (updated after report was built).
+#'
+#' @param manifest_path Path to manifest JSON file
+#'
+#' @return List with freshness status and details
+check_report_freshness <- function(manifest_path) {
+  
+  checked_at <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
+  
+  # Read manifest
+  if (!file.exists(manifest_path)) {
+    return(list(
+      success = FALSE,
+      error = "Manifest file not found",
+      manifest_path = manifest_path,
+      checked_at = checked_at
+    ))
+  }
+  
+  manifest <- tryCatch(
+    jsonlite::fromJSON(manifest_path, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+  
+  if (is.null(manifest)) {
+    return(list(
+      success = FALSE,
+      error = "Could not parse manifest JSON",
+      manifest_path = manifest_path,
+      checked_at = checked_at
+    ))
+  }
+  
+  assets <- manifest$assets %||% list()
+  
+  stale_files <- list()
+  fresh_files <- list()
+  missing_files <- list()
+  
+  for (asset in assets) {
+    original_path <- asset$original_path
+    file_name <- asset$file_name
+    variable_name <- asset$variable_name
+    recorded_mtime <- asset$file_mtime
+    
+    # Check if file exists now
+    if (is.na(original_path) || !file.exists(original_path)) {
+      missing_files <- append(missing_files, list(list(
+        variable_name = variable_name,
+        file_name = file_name,
+        original_path = original_path %||% NA_character_,
+        status = "MISSING"
+      )))
+      next
+    }
+    
+    # Get current mtime of ORIGINAL file
+    current_mtime <- format(file.mtime(original_path), "%Y-%m-%dT%H:%M:%S%z")
+    
+    # Compare times
+    recorded_time <- as.POSIXct(recorded_mtime, format = "%Y-%m-%dT%H:%M:%S%z")
+    current_time <- as.POSIXct(current_mtime, format = "%Y-%m-%dT%H:%M:%S%z")
+    
+    if (current_time > recorded_time) {
+      # Original file is newer than what we inserted — STALE!
+      stale_files <- append(stale_files, list(list(
+        variable_name = variable_name,
+        file_name = file_name,
+        original_path = original_path,
+        recorded_mtime = recorded_mtime,
+        current_mtime = current_mtime,
+        status = "STALE"
+      )))
+    } else {
+      fresh_files <- append(fresh_files, list(list(
+        variable_name = variable_name,
+        file_name = file_name,
+        original_path = original_path,
+        recorded_mtime = recorded_mtime,
+        current_mtime = current_mtime,
+        status = "FRESH"
+      )))
+    }
+  }
+  
+  is_fresh <- (length(stale_files) == 0) && (length(missing_files) == 0)
+  
+  result <- list(
+    success = TRUE,
+    is_fresh = is_fresh,
+    report_version = manifest$report_version,
+    report_build_time = manifest$build_time,
+    docx_out = manifest$docx_out,
+    checked_at = checked_at,
+    summary = list(
+      total_assets = length(assets),
+      fresh_count = length(fresh_files),
+      stale_count = length(stale_files),
+      missing_count = length(missing_files)
+    ),
+    stale_files = stale_files,
+    missing_files = missing_files,
+    fresh_files = fresh_files
+  )
+  
+  # Print summary to console
+  .print_freshness_summary(result)
+  
+  result
+}
+
+
+#' Print Freshness Summary
+#' 
+#' @param result Result from check_report_freshness()
+.print_freshness_summary <- function(result) {
+  
+  cat("\n")
+  cat(strrep("=", 70), "\n")
+  cat("REPORT FRESHNESS CHECK\n")
+  cat(strrep("=", 70), "\n")
+  cat("Report:       ", basename(result$docx_out %||% ""), "\n")
+  cat("Built at:     ", result$report_build_time, "\n")
+  cat("Checked at:   ", result$checked_at, "\n")
+  cat(strrep("-", 70), "\n")
+  
+  s <- result$summary
+  cat(sprintf("Total assets: %d\n", s$total_assets))
+  cat(sprintf("  Fresh:      %d\n", s$fresh_count))
+  cat(sprintf("  Stale:      %d\n", s$stale_count))
+  cat(sprintf("  Missing:    %d\n", s$missing_count))
+  cat(strrep("-", 70), "\n")
+  
+  if (result$is_fresh) {
+    cat("STATUS: ✓ REPORT IS FRESH\n")
+  } else {
+    cat("STATUS: ✗ REPORT IS OUTDATED\n")
+    
+    if (length(result$stale_files) > 0) {
+      cat("\nSTALE FILES (original source updated after build):\n")
+      for (sf in result$stale_files) {
+        cat(sprintf("  • [%s] %s\n", sf$variable_name, sf$file_name))
+        cat(sprintf("      source: %s\n", sf$original_path))
+        cat(sprintf("      at build:  %s\n", sf$recorded_mtime))
+        cat(sprintf("      now:       %s  ← NEWER\n", sf$current_mtime))
+      }
+    }
+    
+    if (length(result$missing_files) > 0) {
+      cat("\nMISSING FILES (not found in source directories):\n")
+      for (mf in result$missing_files) {
+        cat(sprintf("  • [%s] %s\n", mf$variable_name, mf$file_name))
+      }
+    }
+    
+    cat("\n→ Recommendation: Re-run build_report_extended() to update the report.\n")
+  }
+  
+  cat(strrep("=", 70), "\n\n")
+}
+
+
+#' Build Report Extended With Audit (UPDATED)
+#' 
+#' Wrapper around azreportifyr::build_report_extended that:
+#' 1. Creates asset manifest tracking ORIGINAL source files
+#' 2. Calls the actual build
+#' 3. Saves manifest next to report
+#' 4. Logs to audit log
+#'
+build_report_extended_with_audit <- function(
+  config,
+  docx_in,
+  docx_out,
+  figures_path,
+  tables_path,
+  yaml_in,
+  config_yaml,
+  version,
+  versions_root,
+  style_file = NULL,
+  docx_table_style = NULL
+) {
+  
+  # --- 1. Create asset manifest tracking ORIGINAL sources ---
+  version_str <- sprintf("v%03d", as.integer(version))
+  
+  manifest <- create_asset_manifest(
+    yaml_path = yaml_in,
+    source_figure_dirs = config$paths$source_figure_dirs,
+    source_table_dirs = config$paths$source_table_dirs,
+    report_version = version_str,
+    docx_out = docx_out
+  )
+  
+  # Log asset info to audit log
+  if (manifest$asset_count > 0) {
+    asset_details <- vapply(manifest$assets, function(a) {
+      if (isTRUE(a$file_exists)) {
+        sprintf("%s: %s (mtime: %s)", 
+                a$variable_name, 
+                a$file_name, 
+                a$file_mtime)
+      } else {
+        sprintf("%s: %s (NOT FOUND in sources)", 
+                a$variable_name, 
+                a$file_name)
+      }
+    }, character(1))
+    
+    append_audit_log(
+      config = config,
+      severity = "INFO",
+      event = "Asset manifest created (tracking original sources)",
+      details = c(
+        paste0("asset_count=", manifest$asset_count),
+        paste0("source_figure_dirs=", paste(config$paths$source_figure_dirs, collapse = ", ")),
+        paste0("source_table_dirs=", paste(config$paths$source_table_dirs, collapse = ", ")),
+        asset_details
+      )
+    )
+  }
+  
+  # --- 2. Call actual build ---
+  out <- azreportifyr::build_report_extended(
+    docx_in = docx_in,
+    docx_out = docx_out,
+    figures_path = figures_path,
+    tables_path = tables_path,
+    yaml_in = yaml_in,
+    config_yaml = config_yaml,
+    version = version,
+    versions_root = versions_root,
+    docx_table_style = docx_table_style
+  )
+  
+  # --- 3. Save manifest next to report ---
+  manifest_path <- save_asset_manifest(manifest, docx_out)
+  
+  # --- 4. Log completion ---
+  append_audit_log(
+    config = config,
+    severity = "IMPORTANT",
+    event = "build_report_extended completed",
+    details = c(
+      paste0("version=", version),
+      paste0("docx_out=", docx_out),
+      paste0("versions_root=", versions_root),
+      paste0("assets_tracked=", manifest$asset_count),
+      paste0("manifest_path=", manifest_path)
+    )
+  )
+  
+  # Return both the build output and manifest path
+  list(
+    build_result = out,
+    manifest_path = manifest_path,
+    manifest = manifest
+  )
+}

@@ -412,6 +412,7 @@ build_report_extended_with_audit <- function(
     config_yaml = config_yaml,
     version = version,
     versions_root = versions_root,
+    block_paragraph_styles = style_file,
     docx_table_style = docx_table_style
   )
   

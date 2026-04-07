@@ -402,6 +402,7 @@ specific_template_result <- generate_magic_doc(
   mode = "from_template"
 )
 
+
 # Re-sync YAML placeholders into the Specific template
 # (keeps missing markers/red color rules in sync for review).
 sync_review_yaml(

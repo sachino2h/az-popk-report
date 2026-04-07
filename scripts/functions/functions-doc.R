@@ -203,6 +203,38 @@ normalize_doc_scalar <- function(x) {
   if (!nzchar(value)) "" else value
 }
 
+normalize_doc_multiline <- function(x) {
+  if (is.null(x) || length(x) == 0 || all(is.na(x))) {
+    return("")
+  }
+
+  value <- as.character(x[[1]])
+  gsub("\r\n?", "\n", value)
+}
+
+is_blank_multiline <- function(value) {
+  value <- as.character(value %||% "")
+  !nzchar(trimws(value))
+}
+
+escape_magic_multiline_value <- function(value) {
+  value <- as.character(value %||% "")
+  # Canonicalize first so repeated sync cycles stay stable (no growing slashes).
+  value <- unescape_magic_multiline_value(value)
+  value <- gsub("\\\\", "\\\\\\\\", value, perl = TRUE)
+  value <- gsub("\t", "\\\\t", value, fixed = TRUE)
+  value <- gsub("\n", "\\\\n", value, fixed = TRUE)
+  value
+}
+
+unescape_magic_multiline_value <- function(value) {
+  value <- as.character(value %||% "")
+  value <- gsub("\\\\n", "\n", value, perl = TRUE)
+  value <- gsub("\\\\t", "\t", value, perl = TRUE)
+  value <- gsub("\\\\\\\\", "\\\\", value, perl = TRUE)
+  value
+}
+
 normalize_doc_files <- function(x) {
   if (is.null(x) || length(x) == 0) {
     return("")
@@ -493,11 +525,35 @@ build_magic_block_replacement <- function(clean_key, yml_data) {
     display_name <- normalize_doc_key_exact(block_key)
   }
 
+  block_type <- normalize_doc_scalar(block_data$type)
+
   vn <- field_or_missing(display_name, "Name")
+  vf <- field_or_missing(normalize_doc_files(block_data$files), "Files")
+  vty <- field_or_missing(block_type, "Type")
+
+  if (identical(tolower(block_type), "block")) {
+    raw_value <- normalize_doc_multiline(block_data$value)
+    value_missing <- is_blank_multiline(raw_value)
+    value_text <- if (value_missing) "MISSING_VALUE(Value)" else escape_magic_multiline_value(raw_value)
+
+    replacement <- paste0(
+      "<<Name:", vn$value,
+      "|Value:", value_text,
+      "|Files:", vf$value,
+      "|Type:", block_type,
+      ">>"
+    )
+
+    return(list(
+      block_key = block_key,
+      block_id = block_id,
+      replacement = replacement,
+      has_missing = any(c(value_missing, vf$missing))
+    ))
+  }
+
   vt <- field_or_missing(normalize_doc_scalar(block_data$title), "Title")
   vft <- field_or_missing(normalize_doc_scalar(block_data$footnote), "Footnote")
-  vf <- field_or_missing(normalize_doc_files(block_data$files), "Files")
-  vty <- field_or_missing(normalize_doc_scalar(block_data$type), "Type")
 
   replacement <- paste0(
     "<<Name:", vn$value,
@@ -896,6 +952,76 @@ clear_stale_missing_red_in_placeholder_runs <- function(doc) {
   doc
 }
 
+color_full_missing_placeholder_paragraphs_red <- function(doc) {
+  body_xml <- docx_body_xml(doc)
+  ns <- xml2::xml_ns(body_xml)
+  paragraphs <- xml2::xml_find_all(body_xml, ".//w:p", ns)
+
+  if (length(paragraphs) == 0) {
+    return(doc)
+  }
+
+  for (paragraph in paragraphs) {
+    text_nodes <- xml2::xml_find_all(paragraph, ".//w:t", ns)
+    if (length(text_nodes) == 0) {
+      next
+    }
+
+    full_text <- paste(vapply(text_nodes, xml2::xml_text, character(1)), collapse = "")
+    if (!nzchar(full_text)) {
+      next
+    }
+
+    is_block_placeholder <- grepl("<<Name:", full_text, fixed = TRUE)
+    has_missing <- grepl("MISSING(?:_VALUE)?\\(", full_text, perl = TRUE)
+    if (!is_block_placeholder || !has_missing) {
+      next
+    }
+
+    run_nodes <- xml2::xml_find_all(paragraph, ".//w:r", ns)
+    if (length(run_nodes) == 0) {
+      next
+    }
+
+    for (run_node in run_nodes) {
+      vanish_node <- xml2::xml_find_first(run_node, "./w:rPr/w:vanish", ns)
+      if (!inherits(vanish_node, "xml_missing")) {
+        next
+      }
+
+      run_text_nodes <- xml2::xml_find_all(run_node, ".//w:t", ns)
+      if (length(run_text_nodes) == 0) {
+        next
+      }
+      run_text <- paste(vapply(run_text_nodes, xml2::xml_text, character(1)), collapse = "")
+      if (!nzchar(run_text)) {
+        next
+      }
+
+      rpr_node <- xml2::xml_find_first(run_node, "./w:rPr", ns)
+      if (inherits(rpr_node, "xml_missing")) {
+        rpr_node <- xml2::xml_add_child(
+          run_node,
+          xml2::read_xml(sprintf('<w:rPr xmlns:w="%s"/>', WORD_NS)),
+          .where = 0
+        )
+      }
+
+      color_node <- xml2::xml_find_first(rpr_node, "./w:color", ns)
+      if (inherits(color_node, "xml_missing")) {
+        xml2::xml_add_child(
+          rpr_node,
+          xml2::read_xml(sprintf('<w:color xmlns:w="%s" w:val="FF0000"/>', WORD_NS))
+        )
+      } else {
+        xml2::xml_set_attr(color_node, "val", "FF0000")
+      }
+    }
+  }
+
+  doc
+}
+
 add_hidden_ids_to_doc <- function(doc, replacements_df) {
   if (nrow(replacements_df) == 0) {
     return(doc)
@@ -951,7 +1077,7 @@ extract_magic_fields <- function(placeholder_text) {
   value <- gsub("^<<|>>$", "", placeholder_text)
   parts <- strsplit(value, "|", fixed = TRUE)[[1]]
 
-  out <- list(Name = "", Title = "", Footnote = "", Files = "", Type = "")
+  out <- list(Name = "", Value = "", Title = "", Footnote = "", Files = "", Type = "")
 
   for (part in parts) {
     kv <- strsplit(part, ":", fixed = TRUE)[[1]]
@@ -962,6 +1088,9 @@ extract_magic_fields <- function(placeholder_text) {
     key <- trimws(kv[[1]])
     val_raw <- paste(kv[-1], collapse = ":")
     val <- if (identical(key, "Name")) val_raw else trimws(val_raw)
+    if (identical(key, "Value")) {
+      val <- unescape_magic_multiline_value(val)
+    }
 
     if (key %in% names(out)) {
       out[[key]] <- val
@@ -1036,6 +1165,7 @@ extract_review_blocks_from_doc <- function(doc_path) {
         rows[[length(rows) + 1]] <- data.frame(
           block_id = block_id,
           name = "",
+          value = "",
           title = "",
           footnote = "",
           files = "",
@@ -1050,13 +1180,14 @@ extract_review_blocks_from_doc <- function(doc_path) {
 
     for (placeholder in placeholders) {
       fields <- extract_magic_fields(placeholder)
-      if (!nzchar(fields$Name) && !nzchar(fields$Title) && !nzchar(fields$Footnote) && !nzchar(fields$Files) && !nzchar(fields$Type)) {
+      if (!nzchar(fields$Name) && !nzchar(fields$Value) && !nzchar(fields$Title) && !nzchar(fields$Footnote) && !nzchar(fields$Files) && !nzchar(fields$Type)) {
         next
       }
 
       rows[[length(rows) + 1]] <- data.frame(
         block_id = block_id,
         name = fields$Name,
+        value = fields$Value,
         title = fields$Title,
         footnote = fields$Footnote,
         files = fields$Files,
@@ -1072,6 +1203,7 @@ extract_review_blocks_from_doc <- function(doc_path) {
     return(data.frame(
       block_id = character(0),
       name = character(0),
+      value = character(0),
       title = character(0),
       footnote = character(0),
       files = character(0),
@@ -1212,6 +1344,33 @@ extract_rpfy_markers_from_hidden_runs <- function(hidden_texts) {
   dplyr::bind_rows(out)
 }
 
+extract_run_text_preserve_controls <- function(run_node, ns, tab_token = "\\t") {
+  if (inherits(run_node, "xml_missing")) {
+    return("")
+  }
+
+  nodes <- xml2::xml_find_all(run_node, "./w:t|./w:tab|./w:br|./w:cr", ns)
+  if (length(nodes) == 0) {
+    return("")
+  }
+
+  pieces <- vapply(nodes, function(node) {
+    node_name <- sub("^.*:", "", xml2::xml_name(node))
+    if (identical(node_name, "t")) {
+      return(xml2::xml_text(node))
+    }
+    if (identical(node_name, "tab")) {
+      return(tab_token)
+    }
+    if (identical(node_name, "br") || identical(node_name, "cr")) {
+      return("\n")
+    }
+    ""
+  }, character(1))
+
+  paste(pieces, collapse = "")
+}
+
 extract_review_blocks_from_report_doc <- function(doc_path) {
   doc <- officer::read_docx(doc_path)
   body_xml <- officer::docx_body_xml(doc)
@@ -1222,6 +1381,7 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     return(data.frame(
       block_id = character(0),
       name = character(0),
+      value = character(0),
       title = character(0),
       footnote = character(0),
       files = character(0),
@@ -1254,9 +1414,8 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     active_footnote_ids <- character(0)
 
     for (run in run_nodes) {
-      text_nodes <- xml2::xml_find_all(run, ".//w:t", ns)
-      if (length(text_nodes) == 0) next
-      run_text <- paste(xml2::xml_text(text_nodes), collapse = "")
+      run_text <- extract_run_text_preserve_controls(run, ns, tab_token = "\\t")
+      if (!nzchar(run_text)) next
 
       vanish_node <- xml2::xml_find_first(run, "./w:rPr/w:vanish", ns)
       is_hidden <- !inherits(vanish_node, "xml_missing")
@@ -1317,6 +1476,7 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     return(data.frame(
       block_id = character(0),
       name = character(0),
+      value = character(0),
       title = character(0),
       footnote = character(0),
       files = character(0),
@@ -1351,6 +1511,7 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     return(data.frame(
       block_id = character(0),
       name = character(0),
+      value = character(0),
       title = character(0),
       footnote = character(0),
       files = character(0),
@@ -1427,6 +1588,67 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     if (content_start < 1L) content_start <- 1L
     if (content_end > length(paragraphs)) content_end <- length(paragraphs)
     range_idx <- seq.int(content_start, content_end)
+    value <- ""
+
+    if (identical(block_type, "block") && length(range_idx) > 0) {
+      # block.value is defined as leading narrative paragraph content only:
+      # [block_start ... before first asset/footnote section]
+      section_start_candidates <- c(
+        as.integer(image_start_rows$para_idx),
+        as.integer(table_start_rows$para_idx),
+        as.integer(foot_start)
+      )
+      section_start_candidates <- section_start_candidates[!is.na(section_start_candidates)]
+      value_end <- if (length(section_start_candidates) > 0) {
+        min(section_start_candidates) - 1L
+      } else {
+        content_end
+      }
+      value_end <- max(min(value_end, content_end), content_start)
+      value_range_idx <- seq.int(content_start, value_end)
+
+      make_spans <- function(start_rows, end_rows, fallback_end) {
+        spans <- list()
+        if (length(start_rows) == 0) return(spans)
+        starts <- as.integer(start_rows)
+        ends <- as.integer(end_rows)
+        used_end <- integer(0)
+        for (s in starts) {
+          cand <- which(!(seq_along(ends) %in% used_end) & ends >= s)
+          e <- if (length(cand) > 0) {
+            pick <- cand[[1]]
+            used_end <- c(used_end, pick)
+            ends[[pick]]
+          } else {
+            fallback_end
+          }
+          spans[[length(spans) + 1]] <- c(max(content_start, s), min(content_end, e))
+        }
+        spans
+      }
+
+      title_spans <- make_spans(title_start, title_end, end_para)
+      foot_spans <- make_spans(foot_start, foot_end, end_para)
+      excluded_idx <- integer(0)
+      for (sp in c(title_spans, foot_spans)) {
+        if (length(sp) != 2) next
+        s <- as.integer(sp[[1]])
+        e <- as.integer(sp[[2]])
+        if (is.na(s) || is.na(e) || e < s) next
+        excluded_idx <- c(excluded_idx, seq.int(s, e))
+      }
+      excluded_idx <- unique(excluded_idx)
+
+      body_idx <- setdiff(value_range_idx, excluded_idx)
+      # block.value must be pure paragraph text only.
+      # Exclude table content and image/drawing anchor paragraphs.
+      body_idx <- body_idx[!paragraph_in_table[body_idx] & !paragraph_has_drawing[body_idx]]
+      body_lines <- paragraph_visible[body_idx]
+      body_lines <- body_lines[nzchar(trimws(body_lines))]
+      if (length(body_lines) > 0) {
+        value <- normalize_review_value(paste(body_lines, collapse = "\n"))
+      }
+    }
 
     # Detect real visible image/table content only (not hidden markers).
     has_image_content <- FALSE
@@ -1535,6 +1757,7 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     block_name_marker <- normalize_doc_scalar(block_name_marker)
 
     has_payload <- (
+      nzchar(normalize_doc_scalar(value)) ||
       nzchar(normalize_doc_scalar(title)) ||
       nzchar(normalize_doc_scalar(footnote)) ||
       nzchar(normalize_doc_scalar(files_value)) ||
@@ -1545,6 +1768,7 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     rows[[length(rows) + 1]] <- data.frame(
       block_id = block_id,
       name = block_name_marker,
+      value = value,
       title = title,
       footnote = footnote,
       files = files_value,
@@ -1561,6 +1785,7 @@ extract_review_blocks_from_report_doc <- function(doc_path) {
     return(data.frame(
       block_id = character(0),
       name = character(0),
+      value = character(0),
       title = character(0),
       footnote = character(0),
       files = character(0),
@@ -1589,20 +1814,50 @@ parse_files_field <- function(files_value) {
   as.list(values)
 }
 
+block_field_lines <- function(field_name, field_value) {
+  value <- as.character(field_value %||% "")
+  value <- gsub("\r\n?", "\n", value)
+  key_prefix <- paste0("    '", field_name, "':")
+
+  if (!grepl("\n", value, fixed = TRUE)) {
+    return(paste0(key_prefix, " ", yaml_single_quote(value)))
+  }
+
+  line_values <- strsplit(value, "\n", fixed = TRUE)[[1]]
+  if (grepl("\n$", value)) {
+    line_values <- c(line_values, "")
+  }
+  chomp <- if (grepl("\n$", value)) "|" else "|-"
+  c(
+    paste0(key_prefix, " ", chomp),
+    paste0("      ", line_values)
+  )
+}
+
+field_range_with_continuations <- function(lines, field_line_index, block_end) {
+  end_idx <- field_line_index
+  while (end_idx + 1L <= block_end && grepl("^\\s{6}", lines[end_idx + 1L])) {
+    end_idx <- end_idx + 1L
+  }
+  c(field_line_index, end_idx)
+}
+
 replace_or_insert_block_field <- function(lines, block_start, block_end, field_name, field_value) {
   field_pattern <- paste0("^\\s{4}(?:'", field_name, "'|", field_name, "):")
   field_line_idx <- which(grepl(field_pattern, lines[block_start:block_end]))
 
-  new_line <- paste0("    '", field_name, "': ", yaml_single_quote(field_value))
+  new_lines <- block_field_lines(field_name, field_value)
 
   if (length(field_line_idx) > 0) {
     target_idx <- block_start + field_line_idx[[1]] - 1
-    lines[target_idx] <- new_line
+    rng <- field_range_with_continuations(lines, target_idx, block_end)
+    lines <- lines[-seq.int(rng[[1]], rng[[2]])]
+    lines <- append(lines, values = new_lines, after = rng[[1]] - 1)
     return(lines)
   }
 
   insert_after <- block_start
-  for (candidate in c("type", "title", "footnote", "status")) {
+  for (candidate in c("type", "value", "title", "footnote", "status")) {
     pat <- paste0("^    '", candidate, "':")
     idx <- which(grepl(pat, lines[block_start:block_end]))
     if (length(idx) > 0) {
@@ -1610,7 +1865,7 @@ replace_or_insert_block_field <- function(lines, block_start, block_end, field_n
     }
   }
 
-  append(lines, values = new_line, after = insert_after)
+  append(lines, values = new_lines, after = insert_after)
 }
 
 remove_block_field <- function(lines, block_start, block_end, field_name) {
@@ -1620,7 +1875,54 @@ remove_block_field <- function(lines, block_start, block_end, field_name) {
     return(lines)
   }
   target_idx <- block_start + field_line_idx[[1]] - 1
-  lines[-target_idx]
+  rng <- field_range_with_continuations(lines, target_idx, block_end)
+  lines[-seq.int(rng[[1]], rng[[2]])]
+}
+
+sanitize_block_yaml_continuations <- function(lines, block_start, block_end) {
+  if (block_end < block_start) {
+    return(lines)
+  }
+
+  mode <- "none" # one of: none, scalar, files
+  remove_idx <- integer(0)
+
+  for (idx in seq.int(block_start, block_end)) {
+    line <- lines[[idx]]
+
+    field_match <- stringr::str_match(line, "^\\s{4}(?:'([^']+)'|([A-Za-z0-9_]+)):\\s*(.*)$")
+    if (nrow(field_match) > 0 && (!is.na(field_match[, 1]) || !is.na(field_match[, 2]))) {
+      key <- normalize_doc_scalar(if (!is.na(field_match[, 2]) && nzchar(field_match[, 2])) field_match[, 2] else field_match[, 3])
+      rhs <- normalize_doc_scalar(field_match[, 4])
+      if (identical(key, "files")) {
+        mode <- "files"
+      } else if (grepl("^(\\||>)\\-?$", rhs)) {
+        mode <- "scalar"
+      } else {
+        mode <- "none"
+      }
+      next
+    }
+
+    if (grepl("^\\s{6}", line)) {
+      if (identical(mode, "scalar")) {
+        next
+      }
+      if (identical(mode, "files") && grepl("^\\s{6}-\\s", line)) {
+        next
+      }
+      remove_idx <- c(remove_idx, idx)
+      next
+    }
+
+    mode <- "none"
+  }
+
+  if (length(remove_idx) == 0) {
+    return(lines)
+  }
+
+  lines[-sort(unique(remove_idx))]
 }
 
 replace_or_insert_block_files <- function(lines, block_start, block_end, files_value) {
@@ -1653,7 +1955,7 @@ replace_or_insert_block_files <- function(lines, block_start, block_end, files_v
   }
 
   insert_after <- block_start
-  for (candidate in c("type", "title", "footnote", "status")) {
+  for (candidate in c("type", "value", "title", "footnote", "status")) {
     pat <- paste0("^    '", candidate, "':")
     idx <- which(grepl(pat, lines[block_start:block_end]))
     if (length(idx) > 0) {
@@ -1668,21 +1970,39 @@ append_new_block_text <- function(lines, block_key, block_data) {
   key_renamed <- identical(normalize_doc_scalar(block_data$key_renamed), "true")
   previous_key <- normalize_doc_scalar(block_data$previous_key)
 
+  block_type <- normalize_doc_scalar(block_data$type)
+  is_block_type <- identical(tolower(block_type), "block")
+
   block_lines <- c(
     "",
     paste0("  ", yaml_single_quote(block_key), ":"),
-    paste0("    'id': ", yaml_single_quote(normalize_doc_scalar(block_data$id))),
-    paste0("    'type': ", yaml_single_quote(normalize_doc_scalar(block_data$type))),
-    paste0("    'title': ", yaml_single_quote(normalize_doc_scalar(block_data$title))),
-    paste0("    'footnote': ", yaml_single_quote(normalize_doc_scalar(block_data$footnote))),
-    paste0("    'status': ", yaml_single_quote(normalize_doc_scalar(block_data$status)))
+    block_field_lines("id", normalize_doc_scalar(block_data$id)),
+    block_field_lines("type", block_type)
+  )
+
+  if (is_block_type) {
+    block_lines <- c(
+      block_lines,
+      block_field_lines("value", normalize_doc_scalar(block_data$value))
+    )
+  } else {
+    block_lines <- c(
+      block_lines,
+      block_field_lines("title", normalize_doc_scalar(block_data$title)),
+      block_field_lines("footnote", normalize_doc_scalar(block_data$footnote))
+    )
+  }
+
+  block_lines <- c(
+    block_lines,
+    block_field_lines("status", normalize_doc_scalar(block_data$status))
   )
 
   if (key_renamed && nzchar(previous_key)) {
     block_lines <- c(
       block_lines,
-      paste0("    'previous_key': ", yaml_single_quote(previous_key)),
-      "    'key_renamed': 'true'"
+      block_field_lines("previous_key", previous_key),
+      block_field_lines("key_renamed", "true")
     )
   }
 
@@ -1712,6 +2032,42 @@ parse_yaml_block_ranges <- function(lines, blocks_start) {
     out[[i]] <- list(key = key, start = start_idx, end = end_idx)
   }
   out
+}
+
+repair_yaml_block_continuations_in_file <- function(yaml_path) {
+  if (is.null(yaml_path) || !nzchar(yaml_path) || !file.exists(yaml_path)) {
+    return(invisible(FALSE))
+  }
+
+  lines <- readLines(yaml_path, warn = FALSE)
+  if (length(lines) == 0) {
+    return(invisible(FALSE))
+  }
+
+  blocks_header_idx <- which(grepl("^blocks:\\s*$", lines))
+  if (length(blocks_header_idx) == 0) {
+    return(invisible(FALSE))
+  }
+  blocks_start <- blocks_header_idx[[1]]
+  block_ranges <- parse_yaml_block_ranges(lines, blocks_start)
+  if (length(block_ranges) == 0) {
+    return(invisible(FALSE))
+  }
+
+  changed <- FALSE
+  for (range_item in rev(block_ranges)) {
+    before <- lines
+    lines <- sanitize_block_yaml_continuations(lines, range_item$start, range_item$end)
+    if (!identical(before, lines)) {
+      changed <- TRUE
+    }
+  }
+
+  if (changed) {
+    writeLines(lines, yaml_path, useBytes = TRUE)
+  }
+
+  invisible(changed)
 }
 
 remove_top_level_section <- function(lines, section_name) {
@@ -1894,11 +2250,30 @@ write_mapping_yaml_preserve_format <- function(yaml_path, yml_data) {
 
     next_block_candidates <- which(seq_along(lines) > block_start & grepl("^  '.+':\\s*$", lines))
     block_end <- if (length(next_block_candidates) > 0) min(next_block_candidates) - 1 else length(lines)
-    lines <- replace_or_insert_block_field(lines, block_start, block_end, "title", normalize_doc_scalar(block_data$title))
+    block_type <- normalize_doc_scalar(block_data$type)
+    is_block_type <- identical(tolower(block_type), "block")
+
+    if (is_block_type) {
+      lines <- replace_or_insert_block_field(lines, block_start, block_end, "value", normalize_doc_scalar(block_data$value))
+    } else {
+      lines <- remove_block_field(lines, block_start, block_end, "value")
+    }
 
     next_block_candidates <- which(seq_along(lines) > block_start & grepl("^  '.+':\\s*$", lines))
     block_end <- if (length(next_block_candidates) > 0) min(next_block_candidates) - 1 else length(lines)
-    lines <- replace_or_insert_block_field(lines, block_start, block_end, "footnote", normalize_doc_scalar(block_data$footnote))
+    if (is_block_type) {
+      lines <- remove_block_field(lines, block_start, block_end, "title")
+    } else {
+      lines <- replace_or_insert_block_field(lines, block_start, block_end, "title", normalize_doc_scalar(block_data$title))
+    }
+
+    next_block_candidates <- which(seq_along(lines) > block_start & grepl("^  '.+':\\s*$", lines))
+    block_end <- if (length(next_block_candidates) > 0) min(next_block_candidates) - 1 else length(lines)
+    if (is_block_type) {
+      lines <- remove_block_field(lines, block_start, block_end, "footnote")
+    } else {
+      lines <- replace_or_insert_block_field(lines, block_start, block_end, "footnote", normalize_doc_scalar(block_data$footnote))
+    }
 
     next_block_candidates <- which(seq_along(lines) > block_start & grepl("^  '.+':\\s*$", lines))
     block_end <- if (length(next_block_candidates) > 0) min(next_block_candidates) - 1 else length(lines)
@@ -1927,6 +2302,10 @@ write_mapping_yaml_preserve_format <- function(yaml_path, yml_data) {
     next_block_candidates <- which(seq_along(lines) > block_start & grepl("^  '.+':\\s*$", lines))
     block_end <- if (length(next_block_candidates) > 0) min(next_block_candidates) - 1 else length(lines)
     lines <- replace_or_insert_block_files(lines, block_start, block_end, block_data$files)
+
+    next_block_candidates <- which(seq_along(lines) > block_start & grepl("^  '.+':\\s*$", lines))
+    block_end <- if (length(next_block_candidates) > 0) min(next_block_candidates) - 1 else length(lines)
+    lines <- sanitize_block_yaml_continuations(lines, block_start, block_end)
   }
 
   new_block_keys <- setdiff(block_keys, existing_block_keys)
@@ -2006,6 +2385,7 @@ cleanup_duplicate_files_keys_in_yaml <- function(yaml_path) {
 
 sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks = TRUE, allow_key_rename = TRUE) {
   cleanup_duplicate_files_keys_in_yaml(yaml_path)
+  repair_yaml_block_continuations_in_file(yaml_path)
   yml_data <- yaml::read_yaml(yaml_path)
   ensured <- ensure_block_ids(yml_data)
   yml_data <- ensured$data
@@ -2136,6 +2516,7 @@ sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks
     consumed_review_ids <- c(consumed_review_ids, normalize_doc_scalar(match_row$block_id[[1]]))
 
     prev <- list(
+      value = normalize_doc_scalar(block$value),
       title = normalize_doc_scalar(block$title),
       footnote = normalize_doc_scalar(block$footnote),
       type = normalize_doc_scalar(block$type),
@@ -2147,11 +2528,20 @@ sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks
 
     # If block ID still exists in reviewed DOC, treat block as present.
     # This allows partial edits (e.g. title removed) without marking block deleted.
-    block$title <- normalize_review_value(match_row$title[[1]])
-    block$footnote <- normalize_review_value(match_row$footnote[[1]])
     detected_type <- normalize_review_value(match_row$type[[1]])
     if (nzchar(detected_type)) {
       block$type <- detected_type
+    }
+    is_block_type <- identical(tolower(normalize_doc_scalar(block$type)), "block")
+
+    if (is_block_type) {
+      block$value <- normalize_review_value(match_row$value[[1]])
+    } else {
+      block$title <- normalize_review_value(match_row$title[[1]])
+      block$footnote <- normalize_review_value(match_row$footnote[[1]])
+      if (!is.null(block$value)) {
+        block$value <- NULL
+      }
     }
     next_files <- parse_files_field(match_row$files[[1]])
 
@@ -2193,6 +2583,7 @@ sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks
 
     next_state <- "unchanged"
     if (
+      !identical(prev$value, normalize_doc_scalar(block$value)) ||
       !identical(prev$title, normalize_doc_scalar(block$title)) ||
       !identical(prev$footnote, normalize_doc_scalar(block$footnote)) ||
       !identical(prev$type, normalize_doc_scalar(block$type)) ||
@@ -2243,6 +2634,7 @@ sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks
       yml_data$blocks[[new_key]] <- list(
         id = normalize_doc_scalar(row$block_id[[1]]),
         type = normalize_review_value(row$type[[1]]),
+        value = normalize_review_value(row$value[[1]]),
         title = normalize_review_value(row$title[[1]]),
         footnote = normalize_review_value(row$footnote[[1]]),
         status = "new",
@@ -2321,6 +2713,7 @@ sync_yaml_with_review_doc <- function(yaml_path, review_doc_path, add_new_blocks
 
 sync_inline_tags_with_review_doc <- function(yaml_path, review_doc_path) {
   cleanup_duplicate_files_keys_in_yaml(yaml_path)
+  repair_yaml_block_continuations_in_file(yaml_path)
   yml_data <- yaml::read_yaml(yaml_path)
   ensured <- ensure_inline_ids(yml_data)
   yml_data <- ensured$data
@@ -2525,9 +2918,7 @@ extract_inline_values_from_review_report_doc <- function(review_doc_path) {
     active_ids <- character(0)
 
     for (run in runs) {
-      text_nodes <- xml2::xml_find_all(run, ".//w:t", ns)
-      if (length(text_nodes) == 0) next
-      run_text <- paste(xml2::xml_text(text_nodes), collapse = "")
+      run_text <- extract_run_text_preserve_controls(run, ns, tab_token = "\\t")
       if (!nzchar(run_text)) next
 
       vanish_node <- xml2::xml_find_first(run, "./w:rPr/w:vanish", ns)
@@ -2610,6 +3001,7 @@ resolve_inline_key_from_marker_id <- function(marker_id, inline_map) {
 
 sync_inline_tags_with_review_report_doc <- function(yaml_path, review_doc_path) {
   cleanup_duplicate_files_keys_in_yaml(yaml_path)
+  repair_yaml_block_continuations_in_file(yaml_path)
   yml_data <- yaml::read_yaml(yaml_path)
   ensured <- ensure_inline_ids(yml_data)
   yml_data <- ensured$data
@@ -2717,16 +3109,32 @@ get_inline_value_from_yaml <- function(inline_entry) {
 build_review_block_placeholder <- function(block_key, block_data, mark_missing = FALSE) {
   display_name <- normalize_doc_key_exact(block_key)
   block_type <- normalize_doc_scalar(block_data$type)
+  raw_value <- normalize_doc_multiline(block_data$value)
   title <- normalize_doc_scalar(block_data$title)
   footnote <- normalize_doc_scalar(block_data$footnote)
   files <- normalize_doc_files(block_data$files)
 
+  is_block_type <- identical(tolower(block_type), "block")
+
   if (isTRUE(mark_missing)) {
     name_field <- field_or_missing(display_name, "Name")
-    title_field <- field_or_missing(title, "Title")
-    footnote_field <- field_or_missing(footnote, "Footnote")
     files_field <- field_or_missing(files, "Files")
     type_field <- field_or_missing(block_type, "Type")
+
+    if (is_block_type) {
+      value_missing <- is_blank_multiline(raw_value)
+      value_field_value <- if (value_missing) "MISSING_VALUE(Value)" else escape_magic_multiline_value(raw_value)
+      return(paste0(
+        "<<Name:", name_field$value,
+        "|Value:", value_field_value,
+        "|Files:", files_field$value,
+        "|Type:", block_type,
+        ">>"
+      ))
+    }
+
+    title_field <- field_or_missing(title, "Title")
+    footnote_field <- field_or_missing(footnote, "Footnote")
 
     return(paste0(
       "<<Name:", name_field$value,
@@ -2734,6 +3142,16 @@ build_review_block_placeholder <- function(block_key, block_data, mark_missing =
       "|Footnote:", footnote_field$value,
       "|Files:", files_field$value,
       "|Type:", type_field$value,
+      ">>"
+    ))
+  }
+
+  if (is_block_type) {
+    return(paste0(
+      "<<Name:", display_name,
+      "|Value:", escape_magic_multiline_value(raw_value),
+      "|Files:", files,
+      "|Type:", block_type,
       ">>"
     ))
   }
@@ -3030,6 +3448,7 @@ add_hidden_inline_ids_to_doc <- function(doc, yml_data) {
 
 sync_yaml_to_review_doc <- function(yaml_path, review_doc_path, output_doc_path = NULL) {
   cleanup_duplicate_files_keys_in_yaml(yaml_path)
+  repair_yaml_block_continuations_in_file(yaml_path)
   yml_data <- yaml::read_yaml(yaml_path)
   ensured <- ensure_block_ids(yml_data)
   yml_data <- ensured$data
@@ -3120,6 +3539,7 @@ sync_yaml_to_review_doc <- function(yaml_path, review_doc_path, output_doc_path 
   }
   doc <- add_hidden_inline_ids_to_doc(doc, yml_data)
   doc <- clear_stale_missing_red_in_placeholder_runs(doc)
+  doc <- color_full_missing_placeholder_paragraphs_red(doc)
   doc <- color_missing_runs_red(doc)
 
   print(doc, target = output_doc_path)
@@ -3569,6 +3989,7 @@ generate_magic_doc_from_reviewed_output <- function(yaml_path, reviewed_doc_path
   }
 
   cleanup_duplicate_files_keys_in_yaml(yaml_path)
+  repair_yaml_block_continuations_in_file(yaml_path)
   yml_data <- yaml::read_yaml(yaml_path)
   ensured_blocks <- ensure_block_ids(yml_data)
   yml_data <- ensured_blocks$data

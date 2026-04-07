@@ -25,6 +25,6 @@ save_table_rtf: FALSE
 # Figure options
 fig_alignment: "center"
 use_artifact_size: FALSE
-default_fig_width: 5
+default_fig_width: 6
 use_embedded_dimensions: TRUE
 label_multi_figures: TRUE

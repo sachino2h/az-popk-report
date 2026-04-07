@@ -33,7 +33,8 @@ get_config <- function() {
       table_first_column = "Table Left",
       table_normal_cell = "Table Center",
       table_footnote = "Table Footnote Info",
-      extract_table_footnotes = TRUE
+      extract_table_footnotes = TRUE,
+      header_fill = "#FFFFFF"
     )
   )
 }

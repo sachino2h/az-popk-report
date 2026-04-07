@@ -719,6 +719,43 @@
       height: 100%;
     }
 
+    .guide-body {
+      display: grid;
+      gap: 10px;
+      max-height: min(62vh, 620px);
+      overflow: auto;
+      padding-right: 4px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ink);
+    }
+
+    .guide-body p {
+      margin: 0;
+    }
+
+    .guide-list {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .guide-code {
+      font-family: var(--mono);
+      background: rgba(17, 31, 44, 0.06);
+      border: 1px solid rgba(94, 118, 135, 0.18);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: inline-block;
+    }
+
+    .guide-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 6px;
+    }
+
     @keyframes yamlPulse {
       0%, 100% {
         box-shadow: 0 18px 34px rgba(10, 98, 93, 0.24), 0 0 0 0 rgba(15, 143, 132, 0.28);
@@ -889,6 +926,7 @@
               <div id="meta-line" class="meta"></div>
             </div>
             <div class="top-actions">
+              <button id="open-guide" class="btn" type="button">How To Use</button>
               <button id="download-yaml" class="btn primary" type="button">Download YAML</button>
               <button id="copy-yaml" class="btn" type="button">Copy YAML</button>
               <button id="reset-yaml" class="btn" type="button">Reset</button>
@@ -971,6 +1009,34 @@
     </div>
   </div>
 
+  <div id="guide-modal" class="yaml-modal" hidden>
+    <div class="yaml-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-dialog-title">
+      <div class="yaml-dialog-head">
+        <div>
+          <div class="section-kicker">Guide</div>
+          <h2 id="guide-dialog-title">How To Map Assets And Values</h2>
+          <p>Use this checklist while filling mapping.</p>
+        </div>
+        <button id="close-guide" class="btn yaml-dialog-close" type="button" aria-label="Close instructions">×</button>
+      </div>
+      <div class="guide-body">
+        <p>Follow these steps for correct mapping:</p>
+        <ol class="guide-list">
+          <li>Fill inline values in <strong>Inline Values</strong> only when needed.</li>
+          <li>For each block, set <strong>Type</strong> first (<code>image</code> or <code>table</code>), then map files.</li>
+          <li>Add assets using dropdown or drag-and-drop from Asset Browser.</li>
+          <li>Each asset can be mapped only once globally; mapped assets disappear from the right panel.</li>
+          <li>Use title and footnote fields for reviewer-facing text.</li>
+          <li>For spacing with a tab inside title/footnote, type literal <code>\t</code> in YAML value text.</li>
+        </ol>
+        <p class="guide-code">Example: <code>Table 1\tNew one added</code></p>
+      </div>
+      <div class="guide-actions">
+        <button id="guide-got-it" class="btn primary" type="button">Got It</button>
+      </div>
+    </div>
+  </div>
+
   <script id="mapping-data" type="application/json">__MAPPING_DATA__</script>
   <script>
     const INITIAL_DATA = JSON.parse(document.getElementById("mapping-data").textContent);
@@ -1026,11 +1092,12 @@
       return {
         name: safe.name || "",
         type: normalizedType,
+        value: safe.value || "",
         title: safe.title || "",
         footnote: safe.footnote || "",
         status: safe.status || "new",
         files: Array.isArray(safe.files) ? safe.files.filter((item) => item != null).map(String) : [],
-        open: Boolean(safe.title || safe.footnote || (Array.isArray(safe.files) && safe.files.length))
+        open: Boolean(safe.value || safe.title || safe.footnote || (Array.isArray(safe.files) && safe.files.length))
       };
     }
 
@@ -1048,6 +1115,10 @@
       assetCatalog: document.getElementById("asset-catalog"),
       inlineFields: document.getElementById("inline-fields"),
       blockList: document.getElementById("block-list"),
+      openGuide: document.getElementById("open-guide"),
+      closeGuide: document.getElementById("close-guide"),
+      guideGotIt: document.getElementById("guide-got-it"),
+      guideModal: document.getElementById("guide-modal"),
       openYamlPreview: document.getElementById("open-yaml-preview"),
       closeYamlPreview: document.getElementById("close-yaml-preview"),
       copyYamlPreview: document.getElementById("copy-yaml-preview"),
@@ -1269,6 +1340,7 @@
         const files = Array.isArray(block.files) ? block.files : [];
         const available = availableAssetsForBlock(block);
         const mappedCount = files.length ? `${files.length} file${files.length > 1 ? "s" : ""}` : "empty";
+        const isParagraphBlock = block.type === "block";
 
         const mappedFiles = files.length
           ? files.map((filePath, fileIndex) => `
@@ -1301,6 +1373,7 @@
                     <option value="" ${block.type === "" ? "selected" : ""}>Not set</option>
                     <option value="image" ${block.type === "image" ? "selected" : ""}>Image</option>
                     <option value="table" ${block.type === "table" ? "selected" : ""}>Table</option>
+                    <option value="block" ${block.type === "block" ? "selected" : ""}>Block</option>
                   </select>
                 </div>
 
@@ -1323,15 +1396,24 @@
                 </div>
               </div>
 
-              <div class="field">
-                <label>Title</label>
-                <textarea data-block-field="title">${escapeHtml(block.title)}</textarea>
-              </div>
+              ${isParagraphBlock ? `
+                <div class="field">
+                  <label>Value</label>
+                  <textarea data-block-field="value">${escapeHtml(block.value || "")}</textarea>
+                </div>
+              ` : ""}
 
-              <div class="field">
-                <label>Footnote</label>
-                <textarea data-block-field="footnote">${escapeHtml(block.footnote)}</textarea>
-              </div>
+              ${!isParagraphBlock ? `
+                <div class="field">
+                  <label>Title</label>
+                  <textarea data-block-field="title">${escapeHtml(block.title)}</textarea>
+                </div>
+
+                <div class="field">
+                  <label>Footnote</label>
+                  <textarea data-block-field="footnote">${escapeHtml(block.footnote)}</textarea>
+                </div>
+              ` : ""}
 
               <div class="dropzone" data-dropzone="${escapeHtml(block.name)}">
                 <div class="dropzone-label">Drop asset here or use Add file above.</div>
@@ -1547,8 +1629,12 @@
           const files = Array.isArray(block.files) ? block.files : [];
           lines.push(`  ${yamlQuote(block.name)}:`);
           lines.push(...yamlFieldLines("type", block.type, 4));
-          lines.push(...yamlFieldLines("title", block.title, 4));
-          lines.push(...yamlFieldLines("footnote", block.footnote, 4));
+          if ((block.type || "").toLowerCase() === "block") {
+            lines.push(...yamlFieldLines("value", block.value || "", 4));
+          } else {
+            lines.push(...yamlFieldLines("title", block.title, 4));
+            lines.push(...yamlFieldLines("footnote", block.footnote, 4));
+          }
           lines.push(...yamlFieldLines("status", block.status, 4));
 
           if (!files.length) {
@@ -1577,6 +1663,14 @@
 
     function closeYamlPreview() {
       els.yamlModal.hidden = true;
+    }
+
+    function openGuideModal() {
+      els.guideModal.hidden = false;
+    }
+
+    function closeGuideModal() {
+      els.guideModal.hidden = true;
     }
 
     function downloadYaml() {
@@ -1632,6 +1726,14 @@
     });
 
     els.assetSearch.addEventListener("input", renderAssetCatalog);
+    els.openGuide.addEventListener("click", openGuideModal);
+    els.closeGuide.addEventListener("click", closeGuideModal);
+    els.guideGotIt.addEventListener("click", closeGuideModal);
+    els.guideModal.addEventListener("click", (event) => {
+      if (event.target === els.guideModal) {
+        closeGuideModal();
+      }
+    });
     els.openYamlPreview.addEventListener("click", openYamlPreview);
     els.closeYamlPreview.addEventListener("click", closeYamlPreview);
     els.yamlModal.addEventListener("click", (event) => {
@@ -1642,6 +1744,9 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !els.yamlModal.hidden) {
         closeYamlPreview();
+      }
+      if (event.key === "Escape" && !els.guideModal.hidden) {
+        closeGuideModal();
       }
     });
     els.downloadYaml.addEventListener("click", downloadYaml);
@@ -1672,6 +1777,7 @@
     els.resetYaml.addEventListener("click", resetState);
 
     renderAll();
+    openGuideModal();
   </script>
 </body>
 </html>

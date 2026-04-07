@@ -22,17 +22,17 @@ get_config <- function() {
       html_template = here::here("scripts", "templates", "mapping-editor-template.html")
     ),
     block_paragraph_styles = list(
-      table_title = "Table Title",
-      table_footnote = "Table Footnote Info",
-      image_title = "Figure Title",
-      image_footnote = "Table Footnote Info"
+      table_title = "TableTitle",
+      table_footnote = "TableFootnoteInfo",
+      image_title = "FigureTitle",
+      image_footnote = "TableFootnoteInfo"
     ),
     docx_table_style = list(
-      table_header = "Table Head",
-      table_split_row = "Table Left",
-      table_first_column = "Table Left",
-      table_normal_cell = "Table Center",
-      table_footnote = "Table Footnote Info",
+      table_header = "TableHead",
+      table_split_row = "TableLeft",
+      table_first_column = "TableLeft",
+      table_normal_cell = "TableCenter",
+      table_footnote = "TableFootnoteInfo",
       extract_table_footnotes = TRUE,
       header_fill = "#FFFFFF"
     )

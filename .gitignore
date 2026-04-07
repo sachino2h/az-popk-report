@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 bin/*
+/output/*
 
 # OS / editor noise
 .DS_Store
